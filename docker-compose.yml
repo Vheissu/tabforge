@@ -1,0 +1,131 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - postgres
+      - minio
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tabforge:tabforge@postgres:5432/tabforge
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_BUCKET=tabforge
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
+      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
+      - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
+      - ALLOW_ORIGINS=*
+    volumes:
+      - ./data/temp:/app/temp
+      - ./data/output:/app/output
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    depends_on:
+      - redis
+      - postgres
+      - minio
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tabforge:tabforge@postgres:5432/tabforge
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_BUCKET=tabforge
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
+      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
+      - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
+    volumes:
+      - ./data/temp:/app/temp
+      - ./data/output:/app/output
+
+  worker-gpu:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    depends_on:
+      - redis
+      - postgres
+      - minio
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tabforge:tabforge@postgres:5432/tabforge
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_BUCKET=tabforge
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
+      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
+      - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
+    volumes:
+      - ./data/temp:/app/temp
+      - ./data/output:/app/output
+    profiles: [\"gpu\"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=tabforge
+      - POSTGRES_PASSWORD=tabforge
+      - POSTGRES_DB=tabforge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+
+volumes:
+  redis_data:
+  postgres_data:
+  minio_data:

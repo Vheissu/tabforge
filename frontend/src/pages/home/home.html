@@ -1,0 +1,84 @@
+<import from="../../components/instrument-selector/instrument-selector"></import>
+
+<section class="forge-hero">
+  <div class="hero-copy">
+    <p class="hero-kicker">Open-source transcription forge</p>
+    <h1 class="hero-title">Turn YouTube into playable Guitar Pro tabs.</h1>
+    <p class="hero-body">
+      TabForge extracts clean stems, transcribes each part, and outputs a polished .gp5
+      file ready for Guitar Pro, TuxGuitar, or Songsterr workflows.
+    </p>
+    <div class="hero-meta">
+      <div class="meta-card">
+        <span class="meta-label">Pipeline</span>
+        <span class="meta-value">Extract · Split · Transcribe · Forge</span>
+      </div>
+      <div class="meta-card">
+        <span class="meta-label">Formats</span>
+        <span class="meta-value">Guitar, Bass, Drums</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="forge-panel">
+    <div class="panel-header">
+      <h2>Start a transcription</h2>
+      <p>Paste a YouTube link. We’ll handle the rest.</p>
+    </div>
+
+    <form submit.trigger="submit()" class="forge-form">
+      <label class="field">
+        <span>YouTube URL</span>
+        <input
+          type="url"
+          value.bind="youtubeUrl"
+          placeholder="https://www.youtube.com/watch?v=..."
+          required
+        />
+      </label>
+
+      <label class="field">
+        <span>Instruments</span>
+        <instrument-selector
+          instruments.bind="instruments"
+          selected.two-way="selectedInstruments"
+        ></instrument-selector>
+      </label>
+
+      <label class="field">
+        <span>Tuning</span>
+        <select value.bind="tuning">
+          <option value="auto">Auto detect</option>
+          <option value="standard">Standard (EADGBE)</option>
+          <option value="drop_d">Drop D (DADGBE)</option>
+          <option value="half_step_down">Half Step Down (Eb)</option>
+          <option value="full_step_down">Full Step Down (D)</option>
+        </select>
+      </label>
+
+      <div if.bind="error" class="alert">
+        ${error}
+      </div>
+
+      <button type="submit" disabled.bind="isLoading" class="cta">
+        <span if.bind="!isLoading">Forge Tabs</span>
+        <span if.bind="isLoading">Forging...</span>
+      </button>
+    </form>
+  </div>
+</section>
+
+<section class="signal-grid">
+  <div class="signal-card">
+    <h3>Stem separation</h3>
+    <p>Demucs v4 isolates guitars, bass, drums, and vocals for clean MIDI extraction.</p>
+  </div>
+  <div class="signal-card">
+    <h3>AI refinement</h3>
+    <p>Gemini 3 Flash nudges timing, techniques, and fingering for playability.</p>
+  </div>
+  <div class="signal-card">
+    <h3>GP5 output</h3>
+    <p>Compatible with Guitar Pro 6/7/8, TuxGuitar, MuseScore, and Songsterr.</p>
+  </div>
+</section>

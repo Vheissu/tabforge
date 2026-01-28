@@ -1,0 +1,63 @@
+<import from="../../components/progress-bar/progress-bar"></import>
+
+<section class="job-shell">
+  <div class="job-panel">
+    <div class="job-header">
+      <p class="job-kicker">Transcription job</p>
+      <h2>${job?.title || 'Untitled session'}</h2>
+      <p class="job-subtitle">Job ID: ${id}</p>
+    </div>
+
+    <progress-bar value.bind="progress"></progress-bar>
+
+    <div class="job-status">
+      <span class="status-pill" class.bind="job?.status ? 'status-pill is-' + job.status : 'status-pill'">
+        ${job?.status || 'pending'}
+      </span>
+      <span class="status-text">${statusLabel}</span>
+    </div>
+
+    <div if.bind="error" class="alert">
+      ${error}
+    </div>
+
+    <div class="job-actions">
+      <a if.bind="job?.status === 'completed'" class="cta" href.bind="downloadUrl">
+        Download .gp5
+      </a>
+      <button type="button" class="ghost" click.trigger="fetchStatus()">
+        Refresh
+      </button>
+      <a class="ghost" href="/" load="./">Start new job</a>
+    </div>
+
+    <div class="job-meta">
+      <div>
+        <span class="meta-label">Elapsed</span>
+        <span class="meta-value">${elapsedSeconds}s</span>
+      </div>
+      <div>
+        <span class="meta-label">Progress</span>
+        <span class="meta-value">${progress}%</span>
+      </div>
+      <div>
+        <span class="meta-label">Download</span>
+        <span class="meta-value">${job?.download_url ? 'Signed URL' : 'API link'}</span>
+      </div>
+    </div>
+  </div>
+
+  <aside class="job-aside">
+    <h3>What happens next?</h3>
+    <ol>
+      <li>We download audio + validate duration.</li>
+      <li>Stems are separated and analyzed for tempo.</li>
+      <li>Notes are transcribed + refined with AI.</li>
+      <li>We forge your .gp5 download.</li>
+    </ol>
+    <div class="note-card">
+      <h4>Heads up</h4>
+      <p>Longer tracks (over 8 minutes) or dense mixes can take extra time.</p>
+    </div>
+  </aside>
+</section>

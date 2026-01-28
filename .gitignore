@@ -1,0 +1,12 @@
+
+.env
+node_modules/
+frontend/dist/
+frontend/.vite/
+backend/__pycache__/
+backend/.venv/
+.venv/
+data/
+*.pyc
+*.pyo
+*.log

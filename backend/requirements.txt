@@ -1,0 +1,39 @@
+# API
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+pydantic-settings>=2.4.0
+python-multipart>=0.0.12
+
+# Task Queue
+celery>=5.4.0
+redis>=5.2.0
+
+# Database
+sqlalchemy>=2.0.0
+asyncpg>=0.30.0
+alembic>=1.14.0
+
+# Audio Processing
+yt-dlp>=2025.12.0
+demucs>=4.0.0
+librosa>=0.10.0
+madmom>=0.16.0
+numpy>=1.26.0,<2.0
+
+# AI
+google-generativeai>=0.8.0
+
+# Guitar Pro
+pyguitarpro>=0.10.1
+
+# Storage
+minio>=7.2.0
+boto3>=1.35.0
+
+# Utilities
+python-dotenv>=1.0.0
+httpx>=0.28.0
+
+# Build helpers
+cython>=3.0.0

@@ -1,0 +1,10 @@
+<div class="chip-group">
+  <button
+    type="button"
+    repeat.for="inst of instruments"
+    class.bind="isSelected(inst) ? 'chip is-active' : 'chip'"
+    click.trigger="toggle(inst)"
+  >
+    <span class="chip-label">${inst}</span>
+  </button>
+</div>
