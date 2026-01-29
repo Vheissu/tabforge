@@ -1,3 +1,3 @@
-basic-pitch>=0.3.0
-# TensorFlow is required by basic-pitch; limit to supported range.
-tensorflow>=2.4.1,<2.15.1
+# ML deps are only installed on Python <3.12 (wheels not consistently available on 3.12 yet).
+basic-pitch>=0.3.0; python_version < "3.12"
+tensorflow>=2.4.1,<2.15.1; python_version < "3.12"
