@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -8,12 +9,13 @@ from fastapi.responses import FileResponse, RedirectResponse
 
 from app.core.config import get_settings
 from app.core.limiter import rate_limit
-from app.db.crud import create_job, get_job
+from app.db.crud import create_job, get_job, update_job
 from app.db.session import get_session
-from app.schemas import JobResponse, JobStatus, TranscriptionRequest
+from app.schemas import DraftCorrectionRequest, JobResponse, JobStatus, TranscriptionRequest
 from app.services.youtube import validate_youtube_url
 from app.celery_app import celery_app
-from app.services.draft import summarise_draft
+from app.services.draft import apply_draft_corrections, draft_to_transcription, summarise_draft
+from app.services.gp import create_guitar_pro_file
 
 settings = get_settings()
 router = APIRouter(prefix="/api/v1")
@@ -124,6 +126,35 @@ async def get_draft_summary(job_id: str, session=Depends(get_session)) -> dict:
     if not local_path.exists():
         raise HTTPException(status_code=404, detail="Draft not found")
 
-    import json
-
     return summarise_draft(json.loads(local_path.read_text(encoding="utf-8")))
+
+
+@router.post("/draft/{job_id}/regenerate")
+async def regenerate_from_draft(
+    job_id: str,
+    request_data: DraftCorrectionRequest,
+    session=Depends(get_session),
+) -> dict:
+    job = await get_job(session, job_id)
+    if not job or job.status != JobStatus.completed.value:
+        raise HTTPException(status_code=404, detail="Draft not ready or job not found")
+
+    draft_path = Path(settings.output_dir) / f"{job_id}.draft.json"
+    if not draft_path.exists():
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    draft = json.loads(draft_path.read_text(encoding="utf-8"))
+    corrected = apply_draft_corrections(
+        draft,
+        request_data.model_dump(exclude_none=True),
+    )
+
+    backup_path = Path(settings.output_dir) / f"{job_id}.draft.previous.json"
+    backup_path.write_text(json.dumps(draft, indent=2, sort_keys=True), encoding="utf-8")
+    draft_path.write_text(json.dumps(corrected, indent=2, sort_keys=True), encoding="utf-8")
+
+    output_path = Path(settings.output_dir) / f"{job_id}.gp5"
+    create_guitar_pro_file(draft_to_transcription(corrected), str(output_path))
+
+    await update_job(session, job_id, message="Regenerated from corrected draft")
+    return summarise_draft(corrected)
