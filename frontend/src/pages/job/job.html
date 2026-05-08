@@ -110,6 +110,83 @@
             <li repeat.for="action of draftSummary.quality.next_actions">${action}</li>
           </ol>
         </div>
+
+        <form class="correction-bench" submit.trigger="regenerateDraft()">
+          <div class="correction-heading">
+            <div>
+              <span class="meta-label">Correction bench</span>
+              <h4>Regenerate the GP5 without re-running transcription.</h4>
+            </div>
+            <button type="submit" class="cta" disabled.bind="isRegenerating">
+              ${isRegenerating ? 'Regenerating...' : 'Regenerate GP5'}
+            </button>
+          </div>
+
+          <div class="correction-grid">
+            <label class="field">
+              <span>Tempo</span>
+              <input type="number" min="40" max="260" value.bind="correctionTempo" />
+            </label>
+
+            <label class="field">
+              <span>Meter</span>
+              <select value.bind="correctionMeter">
+                <option value="4/4">4/4</option>
+                <option value="3/4">3/4</option>
+                <option value="6/8">6/8</option>
+                <option value="12/8">12/8</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Pickup</span>
+              <select value.bind="correctionPickup">
+                <option value="">None</option>
+                <option value="0.5">Half beat</option>
+                <option value="1">1 beat</option>
+                <option value="2">2 beats</option>
+                <option value="3">3 beats</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Tuning</span>
+              <select value.bind="correctionTuning">
+                <option value="standard">Standard</option>
+                <option value="drop_d">Drop D</option>
+                <option value="half_step_down">Half step down</option>
+                <option value="full_step_down">Full step down</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Capo</span>
+              <input type="number" min="0" max="12" value.bind="correctionCapo" />
+            </label>
+
+            <label class="field">
+              <span>Guitar floor</span>
+              <input type="number" min="1" max="127" value.bind="guitarMinVelocity" />
+            </label>
+
+            <label class="field">
+              <span>Guitar notes / slot</span>
+              <input type="number" min="1" max="6" value.bind="guitarMaxNotes" />
+            </label>
+
+            <label class="field">
+              <span>Bass floor</span>
+              <input type="number" min="1" max="127" value.bind="bassMinVelocity" />
+            </label>
+          </div>
+
+          <div if.bind="correctionError" class="alert">
+            ${correctionError}
+          </div>
+          <div if.bind="correctionMessage" class="success-note">
+            ${correctionMessage}
+          </div>
+        </form>
       </div>
     </section>
   </div>
