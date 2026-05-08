@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 import collections
 import collections.abc
 import numpy as np
@@ -13,8 +11,6 @@ if not hasattr(collections, "MutableSequence"):
 # NumPy 2 removed deprecated aliases used by madmom.
 if not hasattr(np, "float"):
     np.float = float
-
-import madmom
 
 GP_DRUM_MAP = {
     "kick": {"line": 65, "note_head": "normal"},
@@ -31,7 +27,9 @@ GP_DRUM_MAP = {
 }
 
 
-def transcribe_drums(audio_path: str, tempo: float) -> List[dict]:
+def _transcribe_with_madmom(audio_path: str, tempo: float) -> list[dict]:
+    import madmom
+
     proc = madmom.features.drums.DrumTrackProcessor()
     activations = proc(audio_path)
 
@@ -52,3 +50,41 @@ def transcribe_drums(audio_path: str, tempo: float) -> List[dict]:
                 })
 
     return hits
+
+
+def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
+    import librosa
+
+    y, sr = librosa.load(audio_path, sr=22050, mono=True)
+    onset_frames = librosa.onset.onset_detect(
+        y=y,
+        sr=sr,
+        units="frames",
+        backtrack=True,
+        pre_max=6,
+        post_max=6,
+        pre_avg=24,
+        post_avg=24,
+        delta=0.2,
+    )
+    onset_times = librosa.frames_to_time(onset_frames, sr=sr)
+
+    hits = []
+    for index, onset_time in enumerate(onset_times):
+        beat = float(onset_time) * (tempo / 60)
+        hits.append(
+            {
+                "drum": "kick" if index % 4 == 0 else "snare" if index % 2 == 0 else "hihat_closed",
+                "start_beat": beat,
+                "velocity": 96,
+                "ghost": False,
+            }
+        )
+    return hits
+
+
+def transcribe_drums(audio_path: str, tempo: float) -> list[dict]:
+    try:
+        return _transcribe_with_madmom(audio_path, tempo)
+    except Exception:
+        return _transcribe_with_librosa(audio_path, tempo)

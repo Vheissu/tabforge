@@ -1,20 +1,20 @@
-FROM nvidia/cuda:12.4-runtime-ubuntu22.04
+FROM python:3.11-slim
 
 ARG TARGETARCH
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
-    python3-dev \
     build-essential \
     ca-certificates \
-    libsndfile1 \
+    curl \
     ffmpeg \
     git \
-    curl \
+    libsndfile1 \
+    python3-dev \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,15 +22,13 @@ RUN curl -fsSL https://deno.land/install.sh | sh
 ENV DENO_INSTALL="/root/.deno"
 ENV PATH="$DENO_INSTALL/bin:$PATH"
 
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
 COPY requirements.txt requirements-worker.txt requirements-ml.txt ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir cython "numpy<2.0" \
-    && pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 \
+    && pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-worker.txt
 
+# TensorFlow wheels are not published for linux/arm64; only install on amd64.
 RUN if [ "$TARGETARCH" = "amd64" ]; then \
       pip install --no-cache-dir -r requirements-ml.txt; \
     else \

@@ -7,9 +7,9 @@ export class InstrumentSelector {
   toggle(instrument: string): void {
     const index = this.selected.indexOf(instrument);
     if (index > -1) {
-      this.selected.splice(index, 1);
+      this.selected = this.selected.filter((item) => item !== instrument);
     } else {
-      this.selected.push(instrument);
+      this.selected = [...this.selected, instrument];
     }
   }
 

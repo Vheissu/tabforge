@@ -4,18 +4,16 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - api
-    environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
 
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       - redis
       - postgres
@@ -40,7 +38,7 @@ services:
   worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.worker-cpu
     command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
     depends_on:
       - redis
@@ -86,7 +84,7 @@ services:
     volumes:
       - ./data/temp:/app/temp
       - ./data/output:/app/output
-    profiles: [\"gpu\"]
+    profiles: ["gpu"]
     deploy:
       resources:
         reservations:

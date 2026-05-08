@@ -12,7 +12,7 @@ from app.db.crud import create_job, get_job
 from app.db.session import get_session
 from app.schemas import JobResponse, JobStatus, TranscriptionRequest
 from app.services.youtube import validate_youtube_url
-from app.tasks import celery_app
+from app.celery_app import celery_app
 
 settings = get_settings()
 router = APIRouter(prefix="/api/v1")

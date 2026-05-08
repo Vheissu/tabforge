@@ -30,7 +30,14 @@ def validate_youtube_url(youtube_url: str, max_duration: int) -> int:
         youtube_url,
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except FileNotFoundError as exc:
+        raise YouTubeError("yt-dlp is not installed or not on PATH") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "Unable to read YouTube metadata").strip()
+        raise YouTubeError(detail) from exc
+
     info = json.loads(result.stdout)
     duration = int(info.get("duration") or 0)
 
@@ -61,7 +68,14 @@ def extract_audio(youtube_url: str, output_dir: Path) -> dict:
         youtube_url,
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except FileNotFoundError as exc:
+        raise YouTubeError("yt-dlp is not installed or not on PATH") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "Audio extraction failed").strip()
+        raise YouTubeError(detail) from exc
+
     info = json.loads(result.stdout)
 
     audio_path = output_dir / f"{info['id']}.wav"

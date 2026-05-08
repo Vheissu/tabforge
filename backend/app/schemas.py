@@ -13,7 +13,10 @@ class Instrument(str, Enum):
 
 class TranscriptionRequest(BaseModel):
     youtube_url: HttpUrl
-    instruments: List[Instrument] = Field(default_factory=lambda: [Instrument.guitar, Instrument.bass, Instrument.drums])
+    instruments: List[Instrument] = Field(
+        default_factory=lambda: [Instrument.guitar, Instrument.bass, Instrument.drums],
+        min_length=1,
+    )
     tuning: Optional[str] = "auto"
 
 

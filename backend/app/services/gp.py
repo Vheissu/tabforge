@@ -14,6 +14,7 @@ from guitarpro.models import (
     MeasureHeader,
     TimeSignature,
     GuitarString,
+    NoteType,
 )
 
 try:
@@ -22,6 +23,21 @@ except ImportError:  # pragma: no cover - compatibility with older pyguitarpro
     Tempo = None
 
 from app.services.fretboard import get_tuning_midi
+
+DRUM_NOTE_VALUES = {
+    "kick": 36,
+    "snare": 38,
+    "snare_rim": 37,
+    "hihat_closed": 42,
+    "hihat_open": 46,
+    "hihat_pedal": 44,
+    "crash": 49,
+    "ride": 51,
+    "tom_high": 50,
+    "tom_mid": 47,
+    "tom_low": 43,
+}
+
 
 def _duration_from_beats(beats: float) -> Duration:
     if beats >= 4:
@@ -67,7 +83,7 @@ def _create_string_set(tuning: list[int]) -> list[GuitarString]:
     return [GuitarString(i + 1, pitch) for i, pitch in enumerate(reversed(tuning))]
 
 
-def _populate_track(track: Track, notes: list[dict], tempo: int) -> None:
+def _populate_track(track: Track, notes: list[dict], tempo: int, is_drum: bool = False) -> None:
     grouped = _group_notes_by_measure(notes)
     total_measures = max(grouped.keys(), default=0) + 1
 
@@ -79,13 +95,18 @@ def _populate_track(track: Track, notes: list[dict], tempo: int) -> None:
         measure = Measure(track, header)
         voice = measure.voices[0]
 
-        for note_data in grouped.get(measure_idx, []):
+        for note_data in sorted(grouped.get(measure_idx, []), key=lambda n: n.get("start_beat", 0)):
             beat = Beat(voice)
             beat.duration = _duration_from_beats(note_data.get("duration", 1))
 
             note = Note(beat)
-            note.value = int(note_data.get("fret") or 0)
-            note.string = int(note_data.get("string") or 1)
+            note.type = NoteType.normal
+            if is_drum:
+                note.value = DRUM_NOTE_VALUES.get(str(note_data.get("drum")), 42)
+                note.string = 1
+            else:
+                note.value = int(note_data.get("fret") or 0)
+                note.string = int(note_data.get("string") or 1)
             note.velocity = int(note_data.get("velocity", 100))
             _apply_technique(note, note_data.get("technique"))
 
@@ -122,7 +143,7 @@ def create_guitar_pro_file(transcription: dict[str, Any], output_path: str) -> N
         drum_track = Track(song)
         drum_track.name = "Drums"
         drum_track.isPercussionTrack = True
-        _populate_track(drum_track, transcription["drums"], tempo_value)
+        _populate_track(drum_track, transcription["drums"], tempo_value, is_drum=True)
         song.tracks.append(drum_track)
 
     guitarpro.write(song, output_path)

@@ -1,0 +1,20 @@
+-r requirements.txt
+
+# Audio Processing
+demucs>=4.0.0
+librosa>=0.10.0
+numpy>=1.26.0,<2.0
+soundfile>=0.12.1
+
+# AI refinement
+google-generativeai>=0.8.0
+
+# Guitar Pro
+pyguitarpro>=0.10.1
+
+# Storage
+minio>=7.2.0
+boto3>=1.35.0
+
+# Build helpers for source packages pulled by the audio stack.
+cython>=3.0.0

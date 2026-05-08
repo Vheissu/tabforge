@@ -2,16 +2,16 @@
 
 <section class="forge-hero">
   <div class="hero-copy">
-    <p class="hero-kicker">Open-source transcription forge</p>
-    <h1 class="hero-title">Turn YouTube into playable Guitar Pro tabs.</h1>
+    <p class="hero-kicker">YouTube in, tablature out</p>
+    <h1 class="hero-title">Forge a playable Guitar Pro file from a track.</h1>
     <p class="hero-body">
-      TabForge extracts clean stems, transcribes each part, and outputs a polished .gp5
-      file ready for Guitar Pro, TuxGuitar, or Songsterr workflows.
+      TabForge downloads the audio, separates the parts, detects tuning, and writes a
+      .gp5 file for Guitar Pro or TuxGuitar.
     </p>
     <div class="hero-meta">
       <div class="meta-card">
         <span class="meta-label">Pipeline</span>
-        <span class="meta-value">Extract · Split · Transcribe · Forge</span>
+        <span class="meta-value">Extract / Split / Detect / Write</span>
       </div>
       <div class="meta-card">
         <span class="meta-label">Formats</span>
@@ -23,7 +23,7 @@
   <div class="forge-panel">
     <div class="panel-header">
       <h2>Start a transcription</h2>
-      <p>Paste a YouTube link. We’ll handle the rest.</p>
+      <p>Paste a YouTube link and choose the parts to write.</p>
     </div>
 
     <form submit.trigger="submit()" class="forge-form">
@@ -71,14 +71,14 @@
 <section class="signal-grid">
   <div class="signal-card">
     <h3>Stem separation</h3>
-    <p>Demucs v4 isolates guitars, bass, drums, and vocals for clean MIDI extraction.</p>
+    <p>Demucs isolates guitars, bass, drums, and vocals before note detection runs.</p>
   </div>
   <div class="signal-card">
-    <h3>AI refinement</h3>
-    <p>Gemini 3 Flash nudges timing, techniques, and fingering for playability.</p>
+    <h3>Tuning detection</h3>
+    <p>Auto mode checks standard, Drop D, half-step down, and full-step down tunings.</p>
   </div>
   <div class="signal-card">
     <h3>GP5 output</h3>
-    <p>Compatible with Guitar Pro 6/7/8, TuxGuitar, MuseScore, and Songsterr.</p>
+    <p>The worker writes guitar, bass, and drum tracks into one downloadable .gp5 file.</p>
   </div>
 </section>

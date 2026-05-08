@@ -4,8 +4,6 @@ from pathlib import Path
 
 import subprocess
 
-import torch
-
 from app.core.config import get_settings
 
 
@@ -20,6 +18,11 @@ def separate_stems(audio_path: Path, output_dir: Path) -> dict:
         }
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        import torch
+    except Exception as exc:  # pragma: no cover - runtime dependency
+        raise RuntimeError("PyTorch is required when stem separation is enabled") from exc
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model_name = settings.separation_model
     segment = settings.separation_segment_seconds if device == "cpu" else None

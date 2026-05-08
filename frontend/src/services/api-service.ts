@@ -16,6 +16,18 @@ export interface JobResponse {
 export class ApiService {
   private baseUrl = import.meta.env.VITE_API_URL || '/api/v1';
 
+  private async parseError(response: Response, fallback: string): Promise<Error> {
+    try {
+      const error = await response.json();
+      const detail = Array.isArray(error.detail)
+        ? error.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join(', ')
+        : error.detail;
+      return new Error(detail || fallback);
+    } catch {
+      return new Error(fallback);
+    }
+  }
+
   async createTranscription(request: TranscriptionRequest): Promise<JobResponse> {
     const response = await fetch(`${this.baseUrl}/transcribe`, {
       method: 'POST',
@@ -24,28 +36,21 @@ export class ApiService {
     });
 
     if (!response.ok) {
-      let detail = 'Failed to create transcription';
-      try {
-        const error = await response.json();
-        detail = error.detail || detail;
-      } catch {
-        // ignore
-      }
-      throw new Error(detail);
+      throw await this.parseError(response, 'Failed to create transcription');
     }
 
     return response.json();
   }
 
   async getJobStatus(jobId: string): Promise<JobResponse> {
-    const response = await fetch(`${this.baseUrl}/jobs/${jobId}`);
+    const response = await fetch(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`);
     if (!response.ok) {
-      throw new Error('Failed to get job status');
+      throw await this.parseError(response, 'Failed to get job status');
     }
     return response.json();
   }
 
   getDownloadUrl(jobId: string): string {
-    return `${this.baseUrl}/download/${jobId}`;
+    return `${this.baseUrl}/download/${encodeURIComponent(jobId)}`;
   }
 }

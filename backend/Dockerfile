@@ -1,15 +1,12 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
-ARG TARGETARCH
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    python3-dev \
-    libsndfile1 \
-    ffmpeg \
-    git \
+    ca-certificates \
     curl \
     unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -20,15 +17,7 @@ ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 COPY requirements.txt requirements-ml.txt ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir cython "numpy<2.0" \
-    && pip install --no-cache-dir --no-build-isolation -r requirements.txt
-
-# TensorFlow wheels are not published for linux/arm64; only install on amd64.
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-      pip install --no-cache-dir --no-build-isolation -r requirements-ml.txt; \
-    else \
-      echo "Skipping basic-pitch/tensorflow on $TARGETARCH"; \
-    fi
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
