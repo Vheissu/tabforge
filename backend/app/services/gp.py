@@ -15,6 +15,7 @@ from guitarpro.models import (
     TimeSignature,
     GuitarString,
     NoteType,
+    BeatStatus,
 )
 
 try:
@@ -51,11 +52,13 @@ def _duration_from_beats(beats: float) -> Duration:
     return Duration(16)
 
 
-def _group_notes_by_measure(notes: list[dict]) -> dict[int, list[dict]]:
-    grouped: dict[int, list[dict]] = defaultdict(list)
+def _group_notes_by_measure(notes: list[dict]) -> dict[int, dict[int, list[dict]]]:
+    grouped: dict[int, dict[int, list[dict]]] = defaultdict(lambda: defaultdict(list))
     for note in notes:
         measure_index = int(note["start_beat"] // 4)
-        grouped[measure_index].append(note)
+        relative_beat = float(note["start_beat"]) - (measure_index * 4)
+        slot = max(0, min(15, int(round(relative_beat * 4))))
+        grouped[measure_index][slot].append(note)
     return grouped
 
 
@@ -83,34 +86,50 @@ def _create_string_set(tuning: list[int]) -> list[GuitarString]:
     return [GuitarString(i + 1, pitch) for i, pitch in enumerate(reversed(tuning))]
 
 
-def _populate_track(track: Track, notes: list[dict], tempo: int, is_drum: bool = False) -> None:
+def _count_measures(transcription: dict[str, Any]) -> int:
+    max_beat = 0.0
+    for instrument in ("guitar", "bass"):
+        for note in transcription.get(instrument, {}).get("notes", []):
+            max_beat = max(max_beat, float(note.get("start_beat", 0)))
+    for hit in transcription.get("drums", []):
+        max_beat = max(max_beat, float(hit.get("start_beat", 0)))
+    return max(1, int(max_beat // 4) + 1)
+
+
+def _populate_track(track: Track, notes: list[dict], total_measures: int, is_drum: bool = False) -> None:
+    track.measures.clear()
     grouped = _group_notes_by_measure(notes)
-    total_measures = max(grouped.keys(), default=0) + 1
 
     for measure_idx in range(total_measures):
-        header = MeasureHeader(number=measure_idx + 1)
-        header.timeSignature = TimeSignature(4, Duration(4))
-        if measure_idx == 0 and Tempo:
-            header.tempo = Tempo(tempo)
+        header = track.song.measureHeaders[measure_idx]
         measure = Measure(track, header)
         voice = measure.voices[0]
+        measure_notes = grouped.get(measure_idx, {})
 
-        for note_data in sorted(grouped.get(measure_idx, []), key=lambda n: n.get("start_beat", 0)):
+        for slot in range(16):
             beat = Beat(voice)
-            beat.duration = _duration_from_beats(note_data.get("duration", 1))
+            beat.duration = Duration(16)
+            slot_notes = measure_notes.get(slot, [])
+            if not slot_notes:
+                beat.status = BeatStatus.rest
+                voice.beats.append(beat)
+                continue
 
-            note = Note(beat)
-            note.type = NoteType.normal
-            if is_drum:
-                note.value = DRUM_NOTE_VALUES.get(str(note_data.get("drum")), 42)
-                note.string = 1
-            else:
-                note.value = int(note_data.get("fret") or 0)
-                note.string = int(note_data.get("string") or 1)
-            note.velocity = int(note_data.get("velocity", 100))
-            _apply_technique(note, note_data.get("technique"))
+            beat.status = BeatStatus.normal
+            notes_to_write = [max(slot_notes, key=lambda n: int(n.get("velocity", 100)))]
+            for note_data in notes_to_write:
+                note = Note(beat)
+                note.type = NoteType.normal
+                if is_drum:
+                    note.value = DRUM_NOTE_VALUES.get(str(note_data.get("drum")), 42)
+                    note.string = 1
+                else:
+                    note.value = max(0, min(24, int(note_data.get("fret") or 0)))
+                    note.string = max(1, min(len(track.strings), int(note_data.get("string") or 1)))
+                note.velocity = int(note_data.get("velocity", 100))
+                _apply_technique(note, note_data.get("technique"))
+                beat.notes.append(note)
 
-            beat.notes.append(note)
             voice.beats.append(beat)
 
         track.measures.append(measure)
@@ -118,32 +137,41 @@ def _populate_track(track: Track, notes: list[dict], tempo: int, is_drum: bool =
 
 def create_guitar_pro_file(transcription: dict[str, Any], output_path: str) -> None:
     song = Song()
+    song.tracks.clear()
     song.title = transcription.get("title", "Unknown")
     song.artist = transcription.get("artist", "Unknown")
     tempo_value = transcription.get("tempo", 120)
     song.tempo = Tempo(tempo_value) if Tempo else tempo_value
 
     tuning_name = transcription.get("tuning", "standard")
+    total_measures = _count_measures(transcription)
+    song.measureHeaders.clear()
+    for measure_idx in range(total_measures):
+        header = MeasureHeader(number=measure_idx + 1)
+        header.timeSignature = TimeSignature(4, Duration(4))
+        if measure_idx == 0 and Tempo:
+            header.tempo = Tempo(tempo_value)
+        song.measureHeaders.append(header)
 
     if "guitar" in transcription:
         guitar_track = Track(song)
         guitar_track.name = "Guitar"
         guitar_track.strings = _create_string_set(get_tuning_midi(tuning_name, is_bass=False))
-        _populate_track(guitar_track, transcription["guitar"]["notes"], tempo_value)
+        _populate_track(guitar_track, transcription["guitar"]["notes"], total_measures)
         song.tracks.append(guitar_track)
 
     if "bass" in transcription:
         bass_track = Track(song)
         bass_track.name = "Bass"
         bass_track.strings = _create_string_set(get_tuning_midi(tuning_name, is_bass=True))
-        _populate_track(bass_track, transcription["bass"]["notes"], tempo_value)
+        _populate_track(bass_track, transcription["bass"]["notes"], total_measures)
         song.tracks.append(bass_track)
 
     if "drums" in transcription:
         drum_track = Track(song)
         drum_track.name = "Drums"
         drum_track.isPercussionTrack = True
-        _populate_track(drum_track, transcription["drums"], tempo_value, is_drum=True)
+        _populate_track(drum_track, transcription["drums"], total_measures, is_drum=True)
         song.tracks.append(drum_track)
 
     guitarpro.write(song, output_path)

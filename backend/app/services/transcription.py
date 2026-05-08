@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
+import signal
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,33 @@ from app.core.config import get_settings
 from app.services.fretboard import Note, get_tuning_midi, midi_to_note_name, optimize_positions
 
 settings = get_settings()
+
+
+class GeminiRefinementTimeout(TimeoutError):
+    pass
+
+
+def _handle_refinement_timeout(_signum, _frame) -> None:
+    raise GeminiRefinementTimeout("Gemini refinement timed out")
+
+
+@contextmanager
+def _refinement_deadline(timeout_seconds: int):
+    if timeout_seconds <= 0 or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    signal.signal(signal.SIGALRM, _handle_refinement_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
 
 
 def _frequency_range(instrument: str) -> tuple[float, float]:
@@ -96,7 +124,97 @@ def _audio_to_midi_with_librosa(audio_path: Path, instrument: str) -> list[dict]
         current_velocities.append(velocity)
 
     flush(float(librosa.get_duration(y=y, sr=sample_rate)))
-    return notes
+    if notes:
+        return notes
+
+    return _audio_to_midi_with_spectral_fallback(audio_path, instrument)
+
+
+def _audio_to_midi_with_spectral_fallback(audio_path: Path, instrument: str) -> list[dict]:
+    try:
+        import librosa
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - runtime dependency
+        raise RuntimeError("librosa spectral fallback is not available in this environment") from exc
+
+    min_freq, max_freq = _frequency_range(instrument)
+    hop_length = 512
+    y, sample_rate = librosa.load(str(audio_path), sr=22050, mono=True)
+    if y.size == 0:
+        return []
+
+    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    max_rms = float(np.max(rms)) if rms.size else 0.0
+    duration = float(librosa.get_duration(y=y, sr=sample_rate))
+    if duration <= 0 or max_rms <= 0:
+        return []
+
+    onset_frames = librosa.onset.onset_detect(
+        y=y,
+        sr=sample_rate,
+        units="frames",
+        hop_length=hop_length,
+        backtrack=True,
+        pre_max=6,
+        post_max=6,
+        pre_avg=24,
+        post_avg=24,
+        delta=0.12,
+        wait=4,
+    )
+    onset_times = [float(t) for t in librosa.frames_to_time(onset_frames, sr=sample_rate, hop_length=hop_length)]
+    onset_times = [t for t in onset_times if 0 <= t < duration]
+
+    if len(onset_times) < 4:
+        step = 0.5 if instrument == "bass" else 0.25
+        onset_times = [float(t) for t in np.arange(0, duration, step)]
+
+    pitches, magnitudes = librosa.piptrack(
+        y=y,
+        sr=sample_rate,
+        hop_length=hop_length,
+        fmin=min_freq,
+        fmax=max_freq,
+    )
+
+    notes: list[dict] = []
+    boundaries = sorted(set([0.0, *onset_times, duration]))
+    for start_time, end_time in zip(boundaries, boundaries[1:]):
+        if end_time - start_time < 0.05:
+            continue
+
+        start_frame = int(librosa.time_to_frames(start_time, sr=sample_rate, hop_length=hop_length))
+        end_frame = max(start_frame + 1, int(librosa.time_to_frames(end_time, sr=sample_rate, hop_length=hop_length)))
+        frame_rms = rms[start_frame:min(end_frame, len(rms))]
+        if frame_rms.size == 0:
+            continue
+
+        mean_rms = float(np.mean(frame_rms))
+        if mean_rms < max_rms * 0.08:
+            continue
+
+        pitch_slice = pitches[:, start_frame:end_frame]
+        mag_slice = magnitudes[:, start_frame:end_frame]
+        if mag_slice.size == 0 or float(np.max(mag_slice)) <= 0:
+            continue
+
+        row, column = np.unravel_index(int(np.argmax(mag_slice)), mag_slice.shape)
+        frequency = float(pitch_slice[row, column])
+        if not np.isfinite(frequency) or frequency <= 0:
+            continue
+
+        midi = int(round(float(librosa.hz_to_midi(frequency))))
+        velocity = int(max(1, min(127, 35 + (mean_rms / max_rms) * 92)))
+        notes.append(
+            {
+                "start_time": float(start_time),
+                "end_time": float(min(end_time, start_time + 2.0)),
+                "pitch_midi": midi,
+                "velocity": velocity,
+            }
+        )
+
+    return notes[:512]
 
 
 def audio_to_midi(audio_path: Path, instrument: str) -> list[dict]:
@@ -133,7 +251,10 @@ def audio_to_midi(audio_path: Path, instrument: str) -> list[dict]:
                 "velocity": int(event.velocity),
             })
 
-    return normalized
+    if normalized:
+        return normalized
+
+    return _audio_to_midi_with_librosa(audio_path, instrument)
 
 
 def refine_with_gemini(audio_path: Path, notes: list[dict], instrument: str, tempo: int) -> dict | None:
@@ -145,28 +266,34 @@ def refine_with_gemini(audio_path: Path, notes: list[dict], instrument: str, tem
     except Exception:
         return None
 
-    genai.configure(api_key=settings.gemini_api_key)
-    model = genai.GenerativeModel("gemini-3-flash")
-
-    audio_file = genai.upload_file(str(audio_path))
-    note_summary = json.dumps(notes[:50])
-
-    prompt = (
-        f"You are analyzing a {instrument} recording.\n\n"
-        f"Initial MIDI transcription detected these notes (first 50):\n{note_summary}\n\n"
-        f"Tempo is approximately {tempo} BPM.\n\n"
-        "Listen to the audio and provide corrections/refinements:\n\n"
-        "1. Identify any missed notes or incorrect pitches\n"
-        "2. Detect playing techniques: hammer-ons, pull-offs, slides, bends, palm muting, vibrato\n"
-        "3. Suggest optimal fret positions for playability\n"
-        "4. Identify any chord voicings\n\n"
-        "Respond with JSON only, no markdown."
-    )
-
-    response = model.generate_content([prompt, audio_file], generation_config={"temperature": 0.1})
     try:
-        return json.loads(response.text)
-    except json.JSONDecodeError:
+        timeout_seconds = settings.gemini_refinement_timeout_seconds
+        with _refinement_deadline(timeout_seconds):
+            genai.configure(api_key=settings.gemini_api_key)
+            model = genai.GenerativeModel(settings.gemini_model)
+
+            audio_file = genai.upload_file(str(audio_path))
+            note_summary = json.dumps(notes[:50])
+
+            prompt = (
+                f"You are analyzing a {instrument} recording.\n\n"
+                f"Initial MIDI transcription detected these notes (first 50):\n{note_summary}\n\n"
+                f"Tempo is approximately {tempo} BPM.\n\n"
+                "Listen to the audio and provide corrections/refinements:\n\n"
+                "1. Identify any missed notes or incorrect pitches\n"
+                "2. Detect playing techniques: hammer-ons, pull-offs, slides, bends, palm muting, vibrato\n"
+                "3. Suggest optimal fret positions for playability\n"
+                "4. Identify any chord voicings\n\n"
+                "Respond with JSON only, no markdown."
+            )
+
+            response = model.generate_content(
+                [prompt, audio_file],
+                generation_config={"temperature": 0.1},
+                request_options={"timeout": timeout_seconds},
+            )
+            return json.loads(response.text)
+    except Exception:
         return None
 
 

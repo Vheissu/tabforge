@@ -54,8 +54,12 @@ def _transcribe_with_madmom(audio_path: str, tempo: float) -> list[dict]:
 
 def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
     import librosa
+    import numpy as np
 
     y, sr = librosa.load(audio_path, sr=22050, mono=True)
+    if y.size == 0:
+        return []
+
     onset_frames = librosa.onset.onset_detect(
         y=y,
         sr=sr,
@@ -67,6 +71,12 @@ def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
         post_avg=24,
         delta=0.2,
     )
+    if len(onset_frames) == 0:
+        envelope = librosa.onset.onset_strength(y=y, sr=sr)
+        if envelope.size:
+            threshold = float(np.max(envelope)) * 0.45
+            onset_frames = np.flatnonzero(envelope >= threshold)[::8]
+
     onset_times = librosa.frames_to_time(onset_frames, sr=sr)
 
     hits = []
@@ -85,6 +95,10 @@ def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
 
 def transcribe_drums(audio_path: str, tempo: float) -> list[dict]:
     try:
-        return _transcribe_with_madmom(audio_path, tempo)
+        hits = _transcribe_with_madmom(audio_path, tempo)
+        if hits:
+            return hits
     except Exception:
-        return _transcribe_with_librosa(audio_path, tempo)
+        pass
+
+    return _transcribe_with_librosa(audio_path, tempo)

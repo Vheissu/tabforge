@@ -29,7 +29,7 @@ ENV MPLCONFIGDIR="/app/.cache/matplotlib"
 COPY requirements.txt requirements-worker.txt requirements-ml.txt ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip install --no-cache-dir cython "numpy<2.0" \
-    && pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir torch==2.8.0+cpu torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-worker.txt
 
 # TensorFlow wheels are not published for linux/arm64; only install on amd64.

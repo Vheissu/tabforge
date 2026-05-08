@@ -81,15 +81,15 @@ async def download_file(job_id: str, session=Depends(get_session)):
     if not job or job.status != JobStatus.completed.value:
         raise HTTPException(status_code=404, detail="File not ready or job not found")
 
+    local_path = Path(settings.output_dir) / f"{job_id}.gp5"
+    if local_path.exists():
+        return FileResponse(
+            path=local_path,
+            media_type="application/octet-stream",
+            filename=f"{job.title or job_id}.gp5",
+        )
+
     if job.download_url:
         return RedirectResponse(job.download_url)
 
-    local_path = Path(settings.output_dir) / f"{job_id}.gp5"
-    if not local_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-
-    return FileResponse(
-        path=local_path,
-        media_type="application/octet-stream",
-        filename=f"{job.title or job_id}.gp5",
-    )
+    raise HTTPException(status_code=404, detail="File not found")

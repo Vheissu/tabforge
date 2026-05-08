@@ -27,10 +27,14 @@ services:
       - MINIO_SECURE=false
       - MINIO_BUCKET=tabforge
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_REFINEMENT_TIMEOUT_SECONDS=${GEMINI_REFINEMENT_TIMEOUT_SECONDS:-45}
+      - MAX_DURATION_SECONDS=${MAX_DURATION_SECONDS:-600}
+      - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-10}
       - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
       - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
-      - ALLOW_ORIGINS=*
+      - ALLOW_ORIGINS=${ALLOW_ORIGINS:-*}
     volumes:
       - temp_data:/app/temp
       - output_data:/app/output
@@ -53,12 +57,15 @@ services:
       - MINIO_SECURE=false
       - MINIO_BUCKET=tabforge
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_REFINEMENT_TIMEOUT_SECONDS=${GEMINI_REFINEMENT_TIMEOUT_SECONDS:-45}
       - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
       - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
     volumes:
       - temp_data:/app/temp
       - output_data:/app/output
+      - model_cache:/app/.cache
 
   worker-gpu:
     build:
@@ -78,12 +85,15 @@ services:
       - MINIO_SECURE=false
       - MINIO_BUCKET=tabforge
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_REFINEMENT_TIMEOUT_SECONDS=${GEMINI_REFINEMENT_TIMEOUT_SECONDS:-45}
       - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
       - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
     volumes:
       - temp_data:/app/temp
       - output_data:/app/output
+      - model_cache:/app/.cache
     profiles: ["gpu"]
     deploy:
       resources:
@@ -129,3 +139,4 @@ volumes:
   minio_data:
   temp_data:
   output_data:
+  model_cache:

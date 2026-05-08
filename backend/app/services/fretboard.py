@@ -57,7 +57,7 @@ def get_all_positions(midi_note: int, tuning: List[int] = STANDARD_TUNING) -> Li
     for string_idx, open_pitch in enumerate(tuning):
         fret = midi_note - open_pitch
         if 0 <= fret <= 24:
-            positions.append(FretPosition(string=6 - string_idx, fret=fret))
+            positions.append(FretPosition(string=len(tuning) - string_idx, fret=fret))
     return positions
 
 
