@@ -32,8 +32,8 @@ services:
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
       - ALLOW_ORIGINS=*
     volumes:
-      - ./data/temp:/app/temp
-      - ./data/output:/app/output
+      - temp_data:/app/temp
+      - output_data:/app/output
 
   worker:
     build:
@@ -57,8 +57,8 @@ services:
       - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
     volumes:
-      - ./data/temp:/app/temp
-      - ./data/output:/app/output
+      - temp_data:/app/temp
+      - output_data:/app/output
 
   worker-gpu:
     build:
@@ -82,8 +82,8 @@ services:
       - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
     volumes:
-      - ./data/temp:/app/temp
-      - ./data/output:/app/output
+      - temp_data:/app/temp
+      - output_data:/app/output
     profiles: ["gpu"]
     deploy:
       resources:
@@ -127,3 +127,5 @@ volumes:
   redis_data:
   postgres_data:
   minio_data:
+  temp_data:
+  output_data:

@@ -62,8 +62,9 @@ celery -A app.tasks.celery_app worker --loglevel=info
 
 - GEMINI_API_KEY is required for AI refinement, but the system will still run without it (refinement step is skipped).
 - The API image is intentionally lightweight. Audio, ML, Guitar Pro, and storage dependencies live in the worker image.
+- Docker stores temp audio and generated GP5 files in named volumes shared by the API and worker, so downloads still work when object storage upload is unavailable.
 - Tuning can be set to `auto` (default) to let the server detect standard/Drop D/half-step/full-step based on pitch analysis.
-- On Apple Silicon (linux/arm64) Docker builds skip basic-pitch/tensorflow because wheels are unavailable; transcription will return empty notes for pitched instruments unless you build for amd64.
+- On Apple Silicon (linux/arm64) Docker builds skip basic-pitch/tensorflow because wheels are unavailable; pitched instruments use a simpler librosa fallback instead.
 - Use Python 3.11 for local worker development if you want basic-pitch/tensorflow support. Newer Python versions may run the API but skip pitched-instrument transcription models.
 - Separation is the slowest step on CPU (especially Apple Silicon). You can speed it up by setting `SEPARATION_MODEL=htdemucs` or by skipping separation entirely with `SEPARATION_ENABLED=false` (lower accuracy).
 - Default maximum video duration is 10 minutes; update `MAX_DURATION_SECONDS` via env if needed.

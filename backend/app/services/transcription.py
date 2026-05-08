@@ -11,23 +11,105 @@ from app.services.fretboard import Note, get_tuning_midi, midi_to_note_name, opt
 settings = get_settings()
 
 
+def _frequency_range(instrument: str) -> tuple[float, float]:
+    freq_ranges = {
+        "bass": (30.0, 400.0),
+        "guitar": (80.0, 1200.0),
+        "other": (80.0, 2000.0),
+    }
+    return freq_ranges.get(instrument, (80.0, 2000.0))
+
+
+def _audio_to_midi_with_librosa(audio_path: Path, instrument: str) -> list[dict]:
+    try:
+        import librosa
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - runtime dependency
+        raise RuntimeError("basic-pitch and librosa fallback are not available in this environment") from exc
+
+    min_freq, max_freq = _frequency_range(instrument)
+    hop_length = 512
+    frame_length = 2048
+    y, sample_rate = librosa.load(str(audio_path), sr=22050, mono=True)
+    if y.size == 0:
+        return []
+
+    f0, voiced_flag, _ = librosa.pyin(
+        y,
+        fmin=min_freq,
+        fmax=max_freq,
+        sr=sample_rate,
+        frame_length=frame_length,
+        hop_length=hop_length,
+    )
+    times = librosa.frames_to_time(range(len(f0)), sr=sample_rate, hop_length=hop_length)
+    rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+    max_rms = float(np.max(rms)) if rms.size else 0.0
+
+    notes: list[dict] = []
+    current_start: float | None = None
+    current_midis: list[int] = []
+    current_velocities: list[int] = []
+
+    def flush(end_time: float) -> None:
+        nonlocal current_start, current_midis, current_velocities
+        if current_start is not None and current_midis:
+            duration = end_time - current_start
+            if duration >= 0.05:
+                notes.append(
+                    {
+                        "start_time": float(current_start),
+                        "end_time": float(end_time),
+                        "pitch_midi": int(round(float(np.median(current_midis)))),
+                        "velocity": int(round(float(np.median(current_velocities or [80])))),
+                    }
+                )
+        current_start = None
+        current_midis = []
+        current_velocities = []
+
+    for index, frequency in enumerate(f0):
+        time = float(times[index])
+        if not voiced_flag[index] or not np.isfinite(frequency):
+            flush(time)
+            continue
+
+        midi = int(round(float(librosa.hz_to_midi(frequency))))
+        frame_rms = float(rms[min(index, len(rms) - 1)]) if rms.size else 0.0
+        velocity = 70 if max_rms <= 0 else int(max(1, min(127, 35 + (frame_rms / max_rms) * 92)))
+
+        if current_start is None:
+            current_start = time
+            current_midis = [midi]
+            current_velocities = [velocity]
+            continue
+
+        current_pitch = int(round(float(np.median(current_midis))))
+        if abs(midi - current_pitch) > 1:
+            flush(time)
+            current_start = time
+            current_midis = [midi]
+            current_velocities = [velocity]
+            continue
+
+        current_midis.append(midi)
+        current_velocities.append(velocity)
+
+    flush(float(librosa.get_duration(y=y, sr=sample_rate)))
+    return notes
+
+
 def audio_to_midi(audio_path: Path, instrument: str) -> list[dict]:
     try:
         from basic_pitch.inference import predict
         from basic_pitch import ICASSP_2022_MODEL_PATH
         import tensorflow as tf
-    except Exception as exc:  # pragma: no cover - runtime dependency
-        raise RuntimeError("basic-pitch is not available in this environment") from exc
+    except Exception:
+        return _audio_to_midi_with_librosa(audio_path, instrument)
 
     model = tf.saved_model.load(str(ICASSP_2022_MODEL_PATH))
 
-    freq_ranges = {
-        "bass": (30, 400),
-        "guitar": (80, 1200),
-        "other": (80, 2000),
-    }
-
-    min_freq, max_freq = freq_ranges.get(instrument, (80, 2000))
+    min_freq, max_freq = _frequency_range(instrument)
 
     _, _, note_events = predict(
         str(audio_path),
