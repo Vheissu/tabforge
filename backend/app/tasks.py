@@ -65,6 +65,7 @@ def process_transcription(
     from app.services.draft import build_tab_draft
     from app.services.gp import create_guitar_pro_file
     from app.services.separation import separate_stems
+    from app.services.stems import select_tuning_detection_stem
     from app.services.storage import upload_to_storage
     from app.services.transcription import transcribe_pitched_instrument
     from app.services.youtube import extract_audio
@@ -102,7 +103,9 @@ def process_transcription(
         detected_tuning = tuning
         if not tuning or tuning == "auto":
             _run_async(_update_job(job_id, status="analyzing", progress=37, message="Detecting tuning"))
-            tuning_info = detect_tuning(stems.get("other", audio_path))
+            tuning_stem, tuning_source = select_tuning_detection_stem(stems, instruments, audio_path)
+            tuning_info = detect_tuning(tuning_stem)
+            tuning_info["source_stem"] = tuning_source
             detected_tuning = tuning_info["tuning"]
             transcription["tuning"] = detected_tuning
             transcription["tuning_info"] = tuning_info

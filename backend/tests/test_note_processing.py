@@ -30,6 +30,19 @@ class NoteProcessingTests(unittest.TestCase):
         self.assertEqual(len(notes), 1)
         self.assertEqual(notes[0].pitch_midi, 40)
 
+    def test_bass_rejects_quiet_low_ghost_against_stronger_note(self) -> None:
+        from app.services.note_processing import prepare_note_events_for_tab
+
+        events = [
+            {"start_time": 0.0, "end_time": 0.2, "pitch_midi": 35, "velocity": 62},
+            {"start_time": 0.01, "end_time": 0.35, "pitch_midi": 45, "velocity": 110},
+        ]
+
+        notes = prepare_note_events_for_tab(events, "bass", 120, "standard")
+
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0].pitch_midi, 45)
+
     def test_merges_repeated_notes_across_tiny_gaps(self) -> None:
         from app.services.note_processing import prepare_note_events_for_tab
 

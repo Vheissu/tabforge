@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "name": "song-name",
+      "reference": "references/song-name.reference.draft.json",
+      "candidate": "candidates/song-name.generated.draft.json"
+    }
+  ]
+}

@@ -40,7 +40,11 @@ class GuitarProImportTests(unittest.TestCase):
         self.assertEqual(draft["schema_version"], "tabforge-draft-v1")
         self.assertEqual(draft["metadata"]["title"], "Reference Tab")
         self.assertEqual(draft["constraints"]["time_signature"], "3/4")
+        self.assertEqual(draft["constraints"]["capo_fret"], 2)
         self.assertEqual(draft["tracks"][0]["capo_fret"], 2)
+        self.assertEqual(draft["tracks"][0]["notes"][0]["pitch"], "F#4")
+        self.assertEqual(draft["tracks"][0]["notes"][0]["pitch_midi"], 66)
+        self.assertEqual(draft["tracks"][0]["strings"][0]["value"], 64)
         self.assertEqual(draft["tracks"][0]["statistics"]["note_count"], 2)
         self.assertEqual(draft["tracks"][1]["name"], "drums")
 

@@ -53,6 +53,53 @@ class DraftTests(unittest.TestCase):
         self.assertIn("detected_tempo", warning_codes)
         self.assertIn("assumed_meter", warning_codes)
 
+    def test_surfaces_track_analysis_warnings(self) -> None:
+        from app.services.draft import build_tab_draft, summarise_draft
+
+        draft = build_tab_draft(
+            {
+                "title": "Analysis",
+                "constraints": {},
+                "source_stems": {"guitar": "guitar.wav"},
+                "guitar": {
+                    "notes": [{"pitch": "E4", "pitch_midi": 64, "start_beat": 0, "duration": 1}],
+                    "analysis": {
+                        "raw_event_count": 3,
+                        "final_note_count": 1,
+                        "dropped_unpositioned_count": 2,
+                        "refinement_status": "applied",
+                    },
+                },
+            },
+            ["guitar"],
+        )
+        summary = summarise_draft(draft)
+        warning_codes = {warning["code"] for warning in draft["quality"]["warnings"]}
+
+        self.assertIn("guitar_dropped_unpositioned", warning_codes)
+        self.assertIn("guitar_refinement_applied", warning_codes)
+        self.assertEqual(summary["tracks"][0]["analysis"]["raw_event_count"], 3)
+
+    def test_warns_when_detected_tuning_has_low_confidence(self) -> None:
+        from app.services.draft import build_tab_draft, summarise_draft
+
+        draft = build_tab_draft(
+            {
+                "title": "Weak Tuning",
+                "constraints": {},
+                "tuning": "standard",
+                "tuning_info": {"tuning": "standard", "confidence": 0.2},
+                "source_stems": {"guitar": "guitar.wav"},
+                "guitar": {"notes": []},
+            },
+            ["guitar"],
+        )
+        summary = summarise_draft(draft)
+        warning_codes = {warning["code"] for warning in draft["quality"]["warnings"]}
+
+        self.assertIn("low_confidence_tuning", warning_codes)
+        self.assertTrue(any("Set tuning manually" in action for action in summary["quality"]["next_actions"]))
+
     def test_summarises_draft_without_note_payloads(self) -> None:
         from app.services.draft import summarise_draft
 

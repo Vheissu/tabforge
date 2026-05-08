@@ -8,10 +8,20 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
-from app.services.fretboard import Note, get_tuning_midi, midi_to_note_name, optimize_positions
+from app.services.fretboard import Note, get_tuning_midi, midi_to_note_name, note_to_midi, optimize_positions
 from app.services.note_processing import prepare_note_events_for_tab
 
 settings = get_settings()
+
+ALLOWED_TECHNIQUES = {
+    "hammer_on",
+    "pull_off",
+    "slide_up",
+    "slide_down",
+    "bend",
+    "vibrato",
+    "palm_mute",
+}
 
 
 class GeminiRefinementTimeout(TimeoutError):
@@ -65,27 +75,44 @@ def _parse_refinement_response(text: str | None) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _frequency_range(instrument: str) -> tuple[float, float]:
-    freq_ranges = {
-        "bass": (30.0, 400.0),
-        "guitar": (80.0, 1200.0),
-        "other": (80.0, 2000.0),
-    }
-    return freq_ranges.get(instrument, (80.0, 2000.0))
+def _midi_to_hz(midi: int) -> float:
+    return 440.0 * (2 ** ((midi - 69) / 12))
 
 
-def _audio_to_midi_with_librosa(audio_path: Path, instrument: str) -> list[dict]:
-    return _audio_to_midi_with_spectral_fallback(audio_path, instrument)
+def _frequency_range(instrument: str, tuning: str = "standard", capo_fret: int = 0) -> tuple[float, float]:
+    if instrument in {"guitar", "bass"}:
+        tuning_midi = get_tuning_midi(tuning, is_bass=instrument == "bass")
+        if instrument == "guitar" and capo_fret > 0:
+            tuning_midi = [pitch + capo_fret for pitch in tuning_midi]
+        lowest = min(tuning_midi) - 2
+        highest = max(tuning_midi) + 24 + 2
+        return _midi_to_hz(lowest), _midi_to_hz(highest)
+
+    return 80.0, 2000.0
 
 
-def _audio_to_midi_with_spectral_fallback(audio_path: Path, instrument: str) -> list[dict]:
+def _audio_to_midi_with_librosa(
+    audio_path: Path,
+    instrument: str,
+    tuning: str = "standard",
+    capo_fret: int = 0,
+) -> list[dict]:
+    return _audio_to_midi_with_spectral_fallback(audio_path, instrument, tuning, capo_fret)
+
+
+def _audio_to_midi_with_spectral_fallback(
+    audio_path: Path,
+    instrument: str,
+    tuning: str = "standard",
+    capo_fret: int = 0,
+) -> list[dict]:
     try:
         import librosa
         import numpy as np
     except Exception as exc:  # pragma: no cover - runtime dependency
         raise RuntimeError("librosa spectral fallback is not available in this environment") from exc
 
-    min_freq, max_freq = _frequency_range(instrument)
+    min_freq, max_freq = _frequency_range(instrument, tuning, capo_fret)
     hop_length = 512
     y, sample_rate = librosa.load(str(audio_path), sr=22050, mono=True)
     if y.size == 0:
@@ -112,7 +139,7 @@ def _audio_to_midi_with_spectral_fallback(audio_path: Path, instrument: str) -> 
     onset_times = [float(t) for t in librosa.frames_to_time(onset_frames, sr=sample_rate, hop_length=hop_length)]
     onset_times = [t for t in onset_times if 0 <= t < duration]
 
-    if len(onset_times) < 4:
+    if not onset_times:
         step = 0.5 if instrument == "bass" else 0.25
         onset_times = [float(t) for t in np.arange(0, duration, step)]
 
@@ -193,13 +220,129 @@ def _normalize_basic_pitch_event(event) -> dict:
     }
 
 
-def audio_to_midi(audio_path: Path, instrument: str) -> list[dict]:
+def _refinement_note_payloads(refinement: dict | None, instrument: str) -> list[dict]:
+    if not isinstance(refinement, dict):
+        return []
+
+    for key in ("notes", "corrected_notes", "events"):
+        value = refinement.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+
+    instrument_value = refinement.get(instrument)
+    if isinstance(instrument_value, dict):
+        for key in ("notes", "corrected_notes", "events"):
+            value = instrument_value.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+    if isinstance(instrument_value, list):
+        return [item for item in instrument_value if isinstance(item, dict)]
+
+    return []
+
+
+def _refined_payload_to_note(payload: dict) -> Note | None:
+    try:
+        if payload.get("pitch_midi") is not None:
+            pitch_midi = int(payload["pitch_midi"])
+        elif payload.get("midi") is not None:
+            pitch_midi = int(payload["midi"])
+        elif payload.get("pitch"):
+            pitch_midi = note_to_midi(str(payload["pitch"]))
+        else:
+            return None
+
+        start_value = payload.get("start_beat", payload.get("beat", payload.get("start")))
+        if start_value is None:
+            return None
+        start_beat = max(0.0, float(start_value))
+
+        duration_value = payload.get("duration", payload.get("duration_beats"))
+        if duration_value is None and payload.get("end_beat") is not None:
+            duration_value = float(payload["end_beat"]) - start_beat
+        if duration_value is None:
+            return None
+        duration = float(duration_value)
+        if duration <= 0:
+            return None
+
+        velocity_value = int(payload.get("velocity", 100))
+        velocity = max(1, min(127, velocity_value))
+        technique = payload.get("technique")
+        if technique not in ALLOWED_TECHNIQUES:
+            technique = None
+
+        return Note(
+            pitch=midi_to_note_name(pitch_midi),
+            start_beat=round(start_beat, 6),
+            duration=round(duration, 6),
+            technique=technique,
+            velocity=velocity,
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _refinement_count_is_reasonable(base_count: int, refined_count: int) -> bool:
+    if refined_count == 0:
+        return False
+    if base_count == 0:
+        return True
+    ratio = refined_count / base_count
+    upper_ratio = 8.0 if base_count <= 8 else 4.0
+    return 0.25 <= ratio <= upper_ratio
+
+
+def _apply_refinement_notes(
+    refinement: dict | None,
+    instrument: str,
+    tuning_midi: list[int],
+    base_count: int,
+) -> tuple[list[Note], str]:
+    payloads = _refinement_note_payloads(refinement, instrument)
+    if not payloads:
+        return [], "missing_notes"
+
+    refined_notes = [note for payload in payloads if (note := _refined_payload_to_note(payload)) is not None]
+    if not _refinement_count_is_reasonable(base_count, len(refined_notes)):
+        return [], "rejected_count"
+
+    positioned = [note for note in optimize_positions(refined_notes, tuning=tuning_midi) if note.position is not None]
+    if len(positioned) < max(1, int(len(refined_notes) * 0.85)):
+        return [], "rejected_unplayable"
+
+    return positioned, "applied"
+
+
+def _serialise_notes(notes: list[Note]) -> list[dict]:
+    return [
+        {
+            "pitch": n.pitch,
+            "pitch_midi": note_to_midi(n.pitch),
+            "start_beat": n.start_beat,
+            "duration": n.duration,
+            "string": n.position.string if n.position else None,
+            "fret": n.position.fret if n.position else None,
+            "technique": n.technique,
+            "velocity": n.velocity,
+        }
+        for n in notes
+        if n.position is not None
+    ]
+
+
+def audio_to_midi(
+    audio_path: Path,
+    instrument: str,
+    tuning: str = "standard",
+    capo_fret: int = 0,
+) -> list[dict]:
     try:
         from basic_pitch.inference import predict
     except Exception:
-        return _audio_to_midi_with_librosa(audio_path, instrument)
+        return _audio_to_midi_with_librosa(audio_path, instrument, tuning, capo_fret)
 
-    min_freq, max_freq = _frequency_range(instrument)
+    min_freq, max_freq = _frequency_range(instrument, tuning, capo_fret)
 
     _, _, note_events = predict(
         str(audio_path),
@@ -216,7 +359,7 @@ def audio_to_midi(audio_path: Path, instrument: str) -> list[dict]:
     if normalized:
         return normalized
 
-    return _audio_to_midi_with_librosa(audio_path, instrument)
+    return _audio_to_midi_with_librosa(audio_path, instrument, tuning, capo_fret)
 
 
 def refine_with_gemini(audio_path: Path, notes: list[dict], instrument: str, tempo: int) -> dict | None:
@@ -244,12 +387,16 @@ def refine_with_gemini(audio_path: Path, notes: list[dict], instrument: str, tem
                 f"You are analyzing a {instrument} recording.\n\n"
                 f"Initial MIDI transcription detected these notes (first 50):\n{note_summary}\n\n"
                 f"Tempo is approximately {tempo} BPM.\n\n"
-                "Listen to the audio and provide corrections/refinements:\n\n"
-                "1. Identify any missed notes or incorrect pitches\n"
-                "2. Detect playing techniques: hammer-ons, pull-offs, slides, bends, palm muting, vibrato\n"
-                "3. Suggest optimal fret positions for playability\n"
-                "4. Identify any chord voicings\n\n"
-                "Respond with JSON only, no markdown."
+                "Listen to the audio and return a corrected tab event list. Use beat positions at the provided tempo. "
+                "Only include notes that belong to the requested instrument.\n\n"
+                "Respond with JSON only, no markdown, using this shape:\n"
+                "{"
+                '"notes":[{"pitch":"E4","start_beat":0.0,"duration":0.5,'
+                '"velocity":100,"technique":null}],'
+                '"confidence":0.0,'
+                '"summary":"short reason for the main corrections"'
+                "}\n\n"
+                "Allowed techniques are hammer_on, pull_off, slide_up, slide_down, bend, vibrato, and palm_mute."
             )
 
             response = client.models.generate_content(
@@ -283,16 +430,26 @@ def transcribe_pitched_instrument(
     constraints: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
-        note_events = audio_to_midi(audio_path, instrument)
+        constraints = constraints or {}
+        capo_fret = int(constraints.get("capo_fret") or 0)
+        note_events = audio_to_midi(audio_path, instrument, tuning, capo_fret)
     except RuntimeError as exc:
         return {
             "notes": [],
             "refinement": None,
             "warning": str(exc),
+            "analysis": {
+                "raw_event_count": 0,
+                "processed_event_count": 0,
+                "positioned_note_count": 0,
+                "dropped_unpositioned_count": 0,
+                "final_note_count": 0,
+                "refinement_status": "skipped",
+                "refinement_note_count": 0,
+            },
         }
 
     constraints = constraints or {}
-    capo_fret = int(constraints.get("capo_fret") or 0)
     processed_events = prepare_note_events_for_tab(
         note_events,
         instrument,
@@ -314,22 +471,27 @@ def transcribe_pitched_instrument(
 
     tuning_midi = _positioning_tuning(tuning, instrument, capo_fret)
     notes = optimize_positions(notes, tuning=tuning_midi)
+    positioned_notes = [note for note in notes if note.position is not None]
 
     refined = refine_with_gemini(audio_path, note_events, instrument, tempo)
+    refinement_notes, refinement_status = _apply_refinement_notes(
+        refined,
+        instrument,
+        tuning_midi,
+        len(positioned_notes),
+    )
+    final_notes = refinement_notes if refinement_status == "applied" else positioned_notes
 
     return {
-        "notes": [
-            {
-                "pitch": n.pitch,
-                "start_beat": n.start_beat,
-                "duration": n.duration,
-                "string": n.position.string if n.position else None,
-                "fret": n.position.fret if n.position else None,
-                "technique": n.technique,
-                "velocity": n.velocity,
-            }
-            for n in notes
-            if n.position is not None
-        ],
+        "notes": _serialise_notes(final_notes),
         "refinement": refined,
+        "analysis": {
+            "raw_event_count": len(note_events),
+            "processed_event_count": len(processed_events),
+            "positioned_note_count": len(positioned_notes),
+            "dropped_unpositioned_count": len(notes) - len(positioned_notes),
+            "final_note_count": len(final_notes),
+            "refinement_status": refinement_status,
+            "refinement_note_count": len(refinement_notes),
+        },
     }

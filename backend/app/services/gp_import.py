@@ -59,6 +59,18 @@ def _string_pitch(track, string_number: int) -> int | None:
     return None
 
 
+def _is_tied_note(note) -> bool:
+    return getattr(getattr(note, "type", None), "name", "") == "tie"
+
+
+def _extend_previous_tied_note(notes: list[dict[str, Any]], string: int, duration: float) -> bool:
+    for previous in reversed(notes):
+        if previous.get("string") == string and "pitch_midi" in previous:
+            previous["duration"] = round(float(previous.get("duration", 0)) + duration, 3)
+            return True
+    return False
+
+
 def _extract_track_notes(track, measure_starts: list[float]) -> list[dict[str, Any]]:
     notes: list[dict[str, Any]] = []
     for measure_index, measure in enumerate(track.measures):
@@ -82,7 +94,9 @@ def _extract_track_notes(track, measure_starts: list[float]) -> list[dict[str, A
                     open_pitch = _string_pitch(track, int(note.string))
                     if open_pitch is None:
                         continue
-                    pitch_midi = open_pitch + int(note.value)
+                    pitch_midi = open_pitch + int(note.value) + int(track.offset or 0)
+                    if _is_tied_note(note) and _extend_previous_tied_note(notes, int(note.string), duration):
+                        continue
                     notes.append(
                         {
                             "pitch": midi_to_note_name(pitch_midi),
@@ -116,10 +130,18 @@ def import_guitar_pro_file(path: Path) -> dict[str, Any]:
                 "name": _track_name(track),
                 "source_track": track.name,
                 "capo_fret": int(track.offset or 0),
+                "strings": [{"number": int(string.number), "value": int(string.value)} for string in track.strings],
                 "statistics": _track_stats(notes),
                 "notes": notes,
             }
         )
+
+    pitched_capos = [
+        int(track.get("capo_fret") or 0)
+        for track in tracks
+        if track.get("name") in {"guitar", "bass"}
+    ]
+    common_capo = pitched_capos[0] if pitched_capos and all(capo == pitched_capos[0] for capo in pitched_capos) else 0
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -132,6 +154,7 @@ def import_guitar_pro_file(path: Path) -> dict[str, Any]:
         },
         "constraints": {
             "time_signature": _time_signature_label(song.measureHeaders[0]) if song.measureHeaders else "4/4",
+            "capo_fret": common_capo,
         },
         "tuning": {
             "name": "imported",

@@ -111,7 +111,10 @@ def _slot_key(event: TabEvent, profile: ProcessingProfile) -> int:
 def _select_bass_note(slot_events: list[TabEvent]) -> list[TabEvent]:
     max_velocity = max(event.velocity for event in slot_events)
     plausible = [event for event in slot_events if event.velocity >= max_velocity * 0.55]
-    chosen = min(plausible, key=lambda event: (event.pitch_midi, -event.velocity))
+    lowest = min(plausible, key=lambda event: (event.pitch_midi, -event.velocity))
+    if lowest.velocity >= max_velocity * 0.75:
+        return [lowest]
+    chosen = max(plausible, key=lambda event: (event.velocity, event.duration, -event.pitch_midi))
     return [chosen]
 
 

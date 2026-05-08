@@ -34,6 +34,7 @@ export interface DraftTrackSummary {
     chord_slot_count: number;
     last_beat: number;
   };
+  analysis?: Record<string, unknown>;
 }
 
 export interface DraftSummary {

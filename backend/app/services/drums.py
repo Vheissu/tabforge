@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import collections
 import collections.abc
-import numpy as np
 
 # Madmom expects MutableSequence in collections (removed in Python 3.12).
 if not hasattr(collections, "MutableSequence"):
     collections.MutableSequence = collections.abc.MutableSequence
 
 # NumPy 2 removed deprecated aliases used by madmom.
-if not hasattr(np, "float"):
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional runtime dependency
+    np = None
+
+if np is not None and not hasattr(np, "float"):
     np.float = float
 
 GP_DRUM_MAP = {
@@ -27,6 +31,22 @@ GP_DRUM_MAP = {
 }
 
 
+def _local_peak_frames(activations, threshold: float, wait: int = 4) -> list[tuple[int, int, float]]:
+    hits: list[tuple[int, int, float]] = []
+    last_peak_by_drum: dict[int, int] = {}
+    for frame_idx in range(1, len(activations) - 1):
+        frame = activations[frame_idx]
+        for drum_idx, value in enumerate(frame[:3]):
+            if frame_idx - last_peak_by_drum.get(drum_idx, -wait) < wait:
+                continue
+            if value < threshold:
+                continue
+            if value >= activations[frame_idx - 1][drum_idx] and value >= activations[frame_idx + 1][drum_idx]:
+                hits.append((frame_idx, drum_idx, float(value)))
+                last_peak_by_drum[drum_idx] = frame_idx
+    return hits
+
+
 def _transcribe_with_madmom(audio_path: str, tempo: float) -> list[dict]:
     import madmom
 
@@ -35,21 +55,40 @@ def _transcribe_with_madmom(audio_path: str, tempo: float) -> list[dict]:
 
     hits = []
     threshold = 0.3
+    drum_types = ["kick", "snare", "hihat_closed"]
 
-    for frame_idx, frame in enumerate(activations):
+    for frame_idx, drum_idx, value in _local_peak_frames(activations, threshold):
         time = frame_idx * 0.01
-        drum_types = ["kick", "snare", "hihat_closed"]
-        for drum_idx, drum_type in enumerate(drum_types):
-            if frame[drum_idx] > threshold:
-                beat = time * (tempo / 60)
-                hits.append({
-                    "drum": drum_type,
-                    "start_beat": beat,
-                    "velocity": int(frame[drum_idx] * 127),
-                    "ghost": frame[drum_idx] < 0.5,
-                })
+        beat = time * (tempo / 60)
+        hits.append({
+            "drum": drum_types[drum_idx],
+            "start_beat": beat,
+            "velocity": int(value * 127),
+            "ghost": value < 0.5,
+        })
 
     return hits
+
+
+def _classify_drum_window(window, sr: int) -> tuple[str, int]:
+    import numpy as np
+
+    if window.size == 0:
+        return "snare", 80
+
+    spectrum = np.abs(np.fft.rfft(window * np.hanning(window.size)))
+    frequencies = np.fft.rfftfreq(window.size, 1 / sr)
+    low = float(np.sum(spectrum[(frequencies >= 35) & (frequencies < 160)]))
+    mid = float(np.sum(spectrum[(frequencies >= 160) & (frequencies < 2000)]))
+    high = float(np.sum(spectrum[frequencies >= 2000]))
+    total = max(low + mid + high, 1e-9)
+    velocity = int(max(45, min(127, 45 + (np.sqrt(float(np.mean(window ** 2))) * 600))))
+
+    if low / total > 0.45 and low > mid * 1.2:
+        return "kick", velocity
+    if high / total > 0.45 and high > mid:
+        return "hihat_closed", velocity
+    return "snare", velocity
 
 
 def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
@@ -76,13 +115,17 @@ def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
     onset_times = librosa.frames_to_time(onset_frames, sr=sr)
 
     hits = []
-    for index, onset_time in enumerate(onset_times):
+    for onset_time in onset_times:
         beat = float(onset_time) * (tempo / 60)
+        center = int(float(onset_time) * sr)
+        half_window = int(0.06 * sr)
+        window = y[max(0, center - half_window): min(len(y), center + half_window)]
+        drum, velocity = _classify_drum_window(window, sr)
         hits.append(
             {
-                "drum": "kick" if index % 4 == 0 else "snare" if index % 2 == 0 else "hihat_closed",
+                "drum": drum,
                 "start_beat": beat,
-                "velocity": 96,
+                "velocity": velocity,
                 "ghost": False,
             }
         )

@@ -67,13 +67,79 @@ def _quality_warnings(transcription: dict[str, Any], instruments: list[str], sou
 
     tuning_info = transcription.get("tuning_info")
     if tuning_info:
+        tuning_confidence = tuning_info.get("confidence")
+        tuning_severity = "warning" if tuning_confidence is not None and float(tuning_confidence) < 0.5 else "info"
         warnings.append(
             {
                 "code": "detected_tuning",
-                "severity": "info",
+                "severity": tuning_severity,
                 "message": f"Tuning was detected as {transcription.get('tuning', 'standard')}.",
             }
         )
+        if tuning_confidence is not None and float(tuning_confidence) < 0.5:
+            warnings.append(
+                {
+                    "code": "low_confidence_tuning",
+                    "severity": "warning",
+                    "message": "Tuning detection had low confidence; set tuning manually if the tab sounds shifted.",
+                }
+            )
+
+    for instrument in instruments:
+        if instrument not in {"guitar", "bass"}:
+            continue
+        track_result = transcription.get(instrument, {})
+        if not isinstance(track_result, dict):
+            continue
+        if track_result.get("warning"):
+            warnings.append(
+                {
+                    "code": f"{instrument}_transcription_warning",
+                    "severity": "warning",
+                    "message": f"{instrument.title()} transcription warning: {track_result['warning']}",
+                }
+            )
+
+        analysis = track_result.get("analysis", {})
+        if not isinstance(analysis, dict):
+            continue
+        raw_count = int(analysis.get("raw_event_count") or 0)
+        final_count = int(analysis.get("final_note_count") or 0)
+        dropped_count = int(analysis.get("dropped_unpositioned_count") or 0)
+        refinement_status = str(analysis.get("refinement_status") or "")
+
+        if raw_count > 0 and final_count == 0:
+            warnings.append(
+                {
+                    "code": f"{instrument}_no_positioned_notes",
+                    "severity": "warning",
+                    "message": f"{instrument.title()} produced pitch events but none could be placed on the fretboard.",
+                }
+            )
+        if dropped_count > 0:
+            warnings.append(
+                {
+                    "code": f"{instrument}_dropped_unpositioned",
+                    "severity": "info",
+                    "message": f"{instrument.title()} dropped {dropped_count} out-of-range or unplayable pitch event(s).",
+                }
+            )
+        if refinement_status == "applied":
+            warnings.append(
+                {
+                    "code": f"{instrument}_refinement_applied",
+                    "severity": "info",
+                    "message": f"{instrument.title()} used validated Gemini refinement notes.",
+                }
+            )
+        elif refinement_status.startswith("rejected"):
+            warnings.append(
+                {
+                    "code": f"{instrument}_refinement_rejected",
+                    "severity": "info",
+                    "message": f"{instrument.title()} kept the deterministic transcription because refinement was {refinement_status}.",
+                }
+            )
 
     return warnings
 
@@ -88,6 +154,12 @@ def _next_actions(warnings: list[dict], tracks: list[dict]) -> list[str]:
         actions.append("Set the first-bar meter for songs outside straight 4/4.")
     if "mixed_guitar_stem" in warning_codes:
         actions.append("Keep the 6-stem separator enabled so guitar can use a dedicated stem.")
+    if "low_confidence_tuning" in warning_codes:
+        actions.append("Set tuning manually before regenerating when the first draft sounds pitch-shifted.")
+    if any(str(code).endswith("_no_positioned_notes") for code in warning_codes):
+        actions.append("Check tuning/capo and stem choice; detected pitches may be outside the playable range.")
+    if any(str(code).endswith("_refinement_rejected") for code in warning_codes):
+        actions.append("Use the draft report to compare deterministic notes before trusting AI refinement changes.")
 
     for track in tracks:
         stats = track.get("statistics", {})
@@ -117,6 +189,7 @@ def summarise_draft(draft: dict[str, Any]) -> dict[str, Any]:
                 "name": track.get("name"),
                 "source_stem": track.get("source_stem") or track.get("source_track"),
                 "statistics": stats,
+                "analysis": track.get("analysis", {}),
             }
         )
 
@@ -315,11 +388,13 @@ def build_tab_draft(transcription: dict[str, Any], instruments: list[str]) -> di
     tracks = []
     for instrument in instruments:
         notes = _notes_for_track(transcription, instrument)
+        track_result = transcription.get(instrument, {})
         tracks.append(
             {
                 "name": instrument,
                 "source_stem": source_stems.get("guitar" if instrument == "guitar" else instrument),
                 "statistics": _track_stats(notes),
+                "analysis": track_result.get("analysis", {}) if isinstance(track_result, dict) else {},
                 "notes": notes,
             }
         )

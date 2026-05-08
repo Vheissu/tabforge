@@ -28,6 +28,8 @@ class AudioAnalysisTests(unittest.TestCase):
         self.assertEqual(result["tuning"], "standard")
         self.assertIn("offset_semitones", result)
         self.assertIn("low_freq", result)
+        self.assertEqual(result["confidence"], 0.0)
+        self.assertEqual(result["candidate_count"], 0)
 
 
 if __name__ == "__main__":

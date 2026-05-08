@@ -12,6 +12,8 @@ def main() -> int:
     parser.add_argument("reference", type=Path, help="Reference .draft.json")
     parser.add_argument("candidate", type=Path, help="Candidate .draft.json")
     parser.add_argument("--tolerance-beats", type=float, default=0.25)
+    parser.add_argument("--duration-tolerance-beats", type=float, default=0.25)
+    parser.add_argument("--strict", action="store_true", help="Include duration, position, technique, and metadata metrics.")
     args = parser.parse_args()
 
     repo_backend = Path(__file__).resolve().parents[1] / "backend"
@@ -21,7 +23,19 @@ def main() -> int:
 
     reference = json.loads(args.reference.read_text(encoding="utf-8"))
     candidate = json.loads(args.candidate.read_text(encoding="utf-8"))
-    print(json.dumps(compare_drafts(reference, candidate, args.tolerance_beats), indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            compare_drafts(
+                reference,
+                candidate,
+                tolerance_beats=args.tolerance_beats,
+                duration_tolerance_beats=args.duration_tolerance_beats,
+                strict=args.strict,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 

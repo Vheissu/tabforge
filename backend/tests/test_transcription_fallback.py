@@ -135,6 +135,43 @@ class GeminiRefinementTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertLess(time.monotonic() - started_at, 1.8)
 
+    def test_transcription_applies_valid_refinement_notes(self) -> None:
+        from app.services import transcription
+
+        initial_events = [{"start_time": 0, "end_time": 0.5, "pitch_midi": 64, "velocity": 95}]
+        refinement = {
+            "notes": [
+                {
+                    "pitch": "F4",
+                    "start_beat": 0,
+                    "duration": 1,
+                    "velocity": 100,
+                    "technique": "slide_up",
+                }
+            ]
+        }
+
+        with patch.object(transcription, "audio_to_midi", return_value=initial_events):
+            with patch.object(transcription, "refine_with_gemini", return_value=refinement):
+                result = transcription.transcribe_pitched_instrument(Path("fake.wav"), "guitar", 120, "standard", {})
+
+        self.assertEqual(result["analysis"]["refinement_status"], "applied")
+        self.assertEqual(result["notes"][0]["pitch"], "F4")
+        self.assertEqual(result["notes"][0]["pitch_midi"], 65)
+        self.assertEqual(result["notes"][0]["technique"], "slide_up")
+
+    def test_transcription_keeps_pitch_midi_without_refinement(self) -> None:
+        from app.services import transcription
+
+        initial_events = [{"start_time": 0, "end_time": 0.5, "pitch_midi": 64, "velocity": 95}]
+        with patch.object(transcription, "audio_to_midi", return_value=initial_events):
+            with patch.object(transcription, "refine_with_gemini", return_value=None):
+                result = transcription.transcribe_pitched_instrument(Path("fake.wav"), "guitar", 120, "standard", {})
+
+        self.assertEqual(result["analysis"]["refinement_status"], "missing_notes")
+        self.assertEqual(result["notes"][0]["pitch"], "E4")
+        self.assertEqual(result["notes"][0]["pitch_midi"], 64)
+
 
 @unittest.skipUnless(importlib.util.find_spec("pydantic_settings"), "API dependencies are not installed")
 class BasicPitchNormalizationTests(unittest.TestCase):
@@ -154,6 +191,17 @@ class BasicPitchNormalizationTests(unittest.TestCase):
         event = {"start_time": 0, "end_time": 1, "pitch_midi": 40, "amplitude": 0.75}
 
         self.assertEqual(_normalize_basic_pitch_event(event)["velocity"], 95)
+
+    def test_frequency_range_follows_tuning(self) -> None:
+        from app.services.transcription import _frequency_range
+
+        low_drop_d, high_drop_d = _frequency_range("guitar", "drop_d")
+        low_standard, high_standard = _frequency_range("guitar", "standard")
+
+        self.assertLess(low_drop_d, low_standard)
+        self.assertLess(low_drop_d, 74)
+        self.assertGreater(high_drop_d, 1300)
+        self.assertEqual(high_drop_d, high_standard)
 
 
 if __name__ == "__main__":
