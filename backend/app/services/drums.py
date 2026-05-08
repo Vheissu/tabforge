@@ -60,22 +60,18 @@ def _transcribe_with_librosa(audio_path: str, tempo: float) -> list[dict]:
     if y.size == 0:
         return []
 
-    onset_frames = librosa.onset.onset_detect(
-        y=y,
-        sr=sr,
-        units="frames",
-        backtrack=True,
-        pre_max=6,
-        post_max=6,
-        pre_avg=24,
-        post_avg=24,
-        delta=0.2,
-    )
-    if len(onset_frames) == 0:
-        envelope = librosa.onset.onset_strength(y=y, sr=sr)
-        if envelope.size:
-            threshold = float(np.max(envelope)) * 0.45
-            onset_frames = np.flatnonzero(envelope >= threshold)[::8]
+    envelope = librosa.onset.onset_strength(y=y, sr=sr)
+    onset_frames = []
+    if envelope.size:
+        threshold = float(np.max(envelope)) * 0.35
+        wait = 4
+        last_peak = -wait
+        for index in range(1, len(envelope) - 1):
+            if index - last_peak < wait:
+                continue
+            if envelope[index] >= threshold and envelope[index] >= envelope[index - 1] and envelope[index] >= envelope[index + 1]:
+                onset_frames.append(index)
+                last_peak = index
 
     onset_times = librosa.frames_to_time(onset_frames, sr=sr)
 

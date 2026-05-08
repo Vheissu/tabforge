@@ -25,6 +25,9 @@
       <a if.bind="job?.status === 'completed'" class="cta" href.bind="downloadUrl">
         Download .gp5
       </a>
+      <a if.bind="job?.status === 'completed'" class="ghost" href.bind="draftUrl">
+        Download draft JSON
+      </a>
       <button type="button" class="ghost" click.trigger="fetchStatus()">
         Refresh
       </button>
@@ -42,7 +45,7 @@
       </div>
       <div>
         <span class="meta-label">Download</span>
-        <span class="meta-value">${job?.download_url ? 'Signed URL' : 'API link'}</span>
+        <span class="meta-value">${job?.status === 'completed' ? 'GP5 + draft' : 'Pending'}</span>
       </div>
     </div>
   </div>
@@ -51,9 +54,10 @@
     <h3>Processing order</h3>
     <ol>
       <li>Audio is downloaded and duration is checked.</li>
-      <li>Stems are separated and analyzed for tempo.</li>
-      <li>Notes are transcribed and positioned on the fretboard.</li>
-      <li>A .gp5 file is written and attached to this job.</li>
+      <li>Stems are separated and matched to the requested parts.</li>
+      <li>Known meter, tempo, feel, tuning, and capo settings guide the draft.</li>
+      <li>Notes are inferred, cleaned, and positioned on the fretboard.</li>
+      <li>A .gp5 file is written as an editable tab draft.</li>
     </ol>
     <div class="note-card">
       <h4>Heads up</h4>

@@ -177,6 +177,126 @@ class GuitarProGenerationTests(unittest.TestCase):
 
         self.assertEqual(len(first_beat.notes), 3)
 
+    def test_pitched_track_skips_unpositioned_notes_instead_of_clamping(self) -> None:
+        from app.services.gp import create_guitar_pro_file
+
+        notes = [
+            {"pitch": "E4", "start_beat": 0, "duration": 1, "string": None, "fret": None, "velocity": 120},
+            {"pitch": "B3", "start_beat": 0, "duration": 1, "string": 2, "fret": 0, "velocity": 90},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "skip-invalid.gp5"
+            create_guitar_pro_file(
+                {
+                    "title": "Skip Invalid",
+                    "artist": "Test",
+                    "tempo": 120,
+                    "tuning": "standard",
+                    "guitar": {"notes": notes},
+                },
+                str(output_path),
+            )
+
+            import guitarpro
+
+            song = guitarpro.parse(str(output_path))
+            first_beat = song.tracks[0].measures[0].voices[0].beats[0]
+
+        self.assertEqual(len(first_beat.notes), 1)
+        self.assertEqual(first_beat.notes[0].string, 2)
+
+    def test_drum_track_preserves_multiple_kit_pieces_in_same_slot(self) -> None:
+        from app.services.gp import create_guitar_pro_file
+
+        hits = [
+            {"drum": "kick", "start_beat": 0, "duration": 0.25, "velocity": 100},
+            {"drum": "snare", "start_beat": 0, "duration": 0.25, "velocity": 95},
+            {"drum": "hihat_closed", "start_beat": 0, "duration": 0.25, "velocity": 80},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "drum-stack.gp5"
+            create_guitar_pro_file(
+                {
+                    "title": "Drum Stack",
+                    "artist": "Test",
+                    "tempo": 120,
+                    "drums": hits,
+                },
+                str(output_path),
+            )
+
+            import guitarpro
+
+            song = guitarpro.parse(str(output_path))
+            first_beat = song.tracks[0].measures[0].voices[0].beats[0]
+
+        self.assertEqual(len(first_beat.notes), 3)
+
+    def test_writes_non_four_four_time_signature(self) -> None:
+        from app.services.gp import create_guitar_pro_file
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "three-four.gp5"
+            create_guitar_pro_file(
+                {
+                    "title": "Three Four",
+                    "artist": "Test",
+                    "tempo": 120,
+                    "time_signature": "3/4",
+                    "tuning": "standard",
+                    "guitar": {
+                        "notes": [
+                            {"pitch": "E4", "start_beat": 0, "duration": 0.25, "string": 1, "fret": 0, "velocity": 100},
+                            {"pitch": "G4", "start_beat": 3, "duration": 0.25, "string": 1, "fret": 3, "velocity": 100},
+                        ]
+                    },
+                },
+                str(output_path),
+            )
+
+            import guitarpro
+
+            song = guitarpro.parse(str(output_path))
+
+        self.assertEqual(song.measureHeaders[0].timeSignature.numerator, 3)
+        self.assertEqual(len(song.tracks[0].measures), 2)
+        self.assertEqual(len(song.tracks[0].measures[0].voices[0].beats), 12)
+
+    def test_writes_pickup_bar_and_capo(self) -> None:
+        from app.services.gp import create_guitar_pro_file
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "pickup-capo.gp5"
+            create_guitar_pro_file(
+                {
+                    "title": "Pickup Capo",
+                    "artist": "Test",
+                    "tempo": 120,
+                    "time_signature": "4/4",
+                    "pickup_bar_beats": 1.0,
+                    "capo_fret": 2,
+                    "tuning": "standard",
+                    "guitar": {
+                        "notes": [
+                            {"pitch": "F#4", "start_beat": 0, "duration": 0.25, "string": 1, "fret": 0, "velocity": 100},
+                            {"pitch": "A4", "start_beat": 1, "duration": 0.25, "string": 1, "fret": 3, "velocity": 100},
+                        ]
+                    },
+                },
+                str(output_path),
+            )
+
+            import guitarpro
+
+            song = guitarpro.parse(str(output_path))
+
+        self.assertEqual(song.measureHeaders[0].timeSignature.numerator, 1)
+        self.assertEqual(song.measureHeaders[0].timeSignature.denominator.value, 4)
+        self.assertEqual(song.tracks[0].offset, 2)
+        self.assertEqual(len(song.tracks[0].measures[0].voices[0].beats), 4)
+
     def test_long_drum_track_with_duplicate_slots_parses_back(self) -> None:
         from app.services.gp import create_guitar_pro_file
 

@@ -46,6 +46,10 @@ export class Job {
     return this.job?.download_url || this.api.getDownloadUrl(this.id);
   }
 
+  get draftUrl(): string {
+    return this.api.getDraftUrl(this.id);
+  }
+
   async fetchStatus(): Promise<void> {
     if (!this.id) return;
     this.isLoading = true;

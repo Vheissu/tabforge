@@ -43,6 +43,7 @@ async def create_transcription(
             "youtube_url": str(request_data.youtube_url),
             "instruments": [i.value for i in request_data.instruments],
             "tuning": request_data.tuning or "auto",
+            "constraints": request_data.constraints.to_worker_payload(),
         },
     )
 
@@ -93,3 +94,20 @@ async def download_file(job_id: str, session=Depends(get_session)):
         return RedirectResponse(job.download_url)
 
     raise HTTPException(status_code=404, detail="File not found")
+
+
+@router.get("/draft/{job_id}")
+async def download_draft(job_id: str, session=Depends(get_session)):
+    job = await get_job(session, job_id)
+    if not job or job.status != JobStatus.completed.value:
+        raise HTTPException(status_code=404, detail="Draft not ready or job not found")
+
+    local_path = Path(settings.output_dir) / f"{job_id}.draft.json"
+    if not local_path.exists():
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    return FileResponse(
+        path=local_path,
+        media_type="application/json",
+        filename=f"{job.title or job_id}.draft.json",
+    )

@@ -2,6 +2,13 @@ export interface TranscriptionRequest {
   youtube_url: string;
   instruments: string[];
   tuning?: string;
+  constraints?: {
+    first_bar_time_signature?: string;
+    pickup_bar_beats?: number | null;
+    first_bar_tempo_bpm?: number | null;
+    triplet_feel?: 'auto' | 'straight' | 'triplet';
+    capo_fret?: number;
+  };
 }
 
 export interface JobResponse {
@@ -52,5 +59,9 @@ export class ApiService {
 
   getDownloadUrl(jobId: string): string {
     return `${this.baseUrl}/download/${encodeURIComponent(jobId)}`;
+  }
+
+  getDraftUrl(jobId: string): string {
+    return `${this.baseUrl}/draft/${encodeURIComponent(jobId)}`;
   }
 }

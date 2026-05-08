@@ -1,5 +1,6 @@
 
 .env
+.DS_Store
 node_modules/
 frontend/dist/
 frontend/.vite/
@@ -7,6 +8,7 @@ backend/__pycache__/
 backend/.venv/
 .venv/
 data/
+test-artifacts/
 *.pyc
 *.pyo
 *.log

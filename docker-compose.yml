@@ -32,7 +32,7 @@ services:
       - MAX_DURATION_SECONDS=${MAX_DURATION_SECONDS:-600}
       - RATE_LIMIT_PER_HOUR=${RATE_LIMIT_PER_HOUR:-10}
       - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
-      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
+      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_6s}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
       - ALLOW_ORIGINS=${ALLOW_ORIGINS:-*}
     volumes:
@@ -43,7 +43,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker-cpu
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.tasks.celery_app worker --loglevel=info --pool=solo --concurrency=1
     depends_on:
       - redis
       - postgres
@@ -60,7 +60,7 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-flash-preview}
       - GEMINI_REFINEMENT_TIMEOUT_SECONDS=${GEMINI_REFINEMENT_TIMEOUT_SECONDS:-45}
       - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
-      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
+      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_6s}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
     volumes:
       - temp_data:/app/temp
@@ -71,7 +71,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.tasks.celery_app worker --loglevel=info --pool=solo --concurrency=1
     depends_on:
       - redis
       - postgres
@@ -88,7 +88,7 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3-flash-preview}
       - GEMINI_REFINEMENT_TIMEOUT_SECONDS=${GEMINI_REFINEMENT_TIMEOUT_SECONDS:-45}
       - SEPARATION_ENABLED=${SEPARATION_ENABLED:-true}
-      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_ft}
+      - SEPARATION_MODEL=${SEPARATION_MODEL:-htdemucs_6s}
       - SEPARATION_SEGMENT_SECONDS=${SEPARATION_SEGMENT_SECONDS:-7.8}
     volumes:
       - temp_data:/app/temp

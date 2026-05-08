@@ -56,6 +56,66 @@
         </select>
       </label>
 
+      <div class="settings-bar">
+        <div>
+          <span class="meta-label">Transcription constraints</span>
+          <p>Use these when the song structure is known. Auto remains fine for quick drafts.</p>
+        </div>
+        <button type="button" class="ghost" click.trigger="toggleSettings()">
+          ${showSettings ? 'Hide settings' : 'Show settings'}
+        </button>
+      </div>
+
+      <div if.bind="showSettings" class="constraint-grid">
+        <label class="field">
+          <span>First bar meter</span>
+          <select value.bind="firstBarTimeSignature">
+            <option value="auto">Auto</option>
+            <option value="4/4">4/4</option>
+            <option value="3/4">3/4</option>
+            <option value="6/8">6/8</option>
+            <option value="12/8">12/8</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Pickup bar</span>
+          <select value.bind="pickupBarBeats">
+            <option value="">Auto / none</option>
+            <option value="0">No pickup</option>
+            <option value="0.5">Half beat</option>
+            <option value="1">1 beat</option>
+            <option value="2">2 beats</option>
+            <option value="3">3 beats</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>First bar tempo</span>
+          <input
+            type="number"
+            min="40"
+            max="260"
+            value.bind="firstBarTempoBpm"
+            placeholder="Auto"
+          />
+        </label>
+
+        <label class="field">
+          <span>Triplet feel</span>
+          <select value.bind="tripletFeel">
+            <option value="auto">Auto</option>
+            <option value="straight">Straight</option>
+            <option value="triplet">Triplet / shuffle</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Capo fret</span>
+          <input type="number" min="0" max="12" value.bind="capoFret" />
+        </label>
+      </div>
+
       <div if.bind="error" class="alert">
         ${error}
       </div>
@@ -70,15 +130,15 @@
 
 <section class="signal-grid">
   <div class="signal-card">
-    <h3>Stem separation</h3>
-    <p>Demucs isolates guitars, bass, drums, and vocals before note detection runs.</p>
+    <h3>Part separation</h3>
+    <p>Demucs can split guitar, bass, drums, vocals, and piano before note detection runs.</p>
   </div>
   <div class="signal-card">
-    <h3>Tuning detection</h3>
-    <p>Auto mode checks standard, Drop D, half-step down, and full-step down tunings.</p>
+    <h3>Musical constraints</h3>
+    <p>Meter, pickup, tempo, triplet feel, tuning, and capo can guide the draft.</p>
   </div>
   <div class="signal-card">
-    <h3>GP5 output</h3>
+    <h3>Editable draft</h3>
     <p>The worker writes guitar, bass, and drum tracks into one downloadable .gp5 file.</p>
   </div>
 </section>

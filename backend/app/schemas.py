@@ -11,6 +11,29 @@ class Instrument(str, Enum):
     drums = "drums"
 
 
+class TripletFeel(str, Enum):
+    auto = "auto"
+    straight = "straight"
+    triplet = "triplet"
+
+
+class TranscriptionConstraints(BaseModel):
+    first_bar_time_signature: str = Field(default="auto", pattern="^(auto|4/4|3/4|6/8|12/8)$")
+    pickup_bar_beats: Optional[float] = Field(default=None, ge=0, le=8)
+    first_bar_tempo_bpm: Optional[int] = Field(default=None, ge=40, le=260)
+    triplet_feel: TripletFeel = TripletFeel.auto
+    capo_fret: int = Field(default=0, ge=0, le=12)
+
+    def to_worker_payload(self) -> dict:
+        return {
+            "first_bar_time_signature": self.first_bar_time_signature,
+            "pickup_bar_beats": self.pickup_bar_beats,
+            "first_bar_tempo_bpm": self.first_bar_tempo_bpm,
+            "triplet_feel": None if self.triplet_feel == TripletFeel.auto else self.triplet_feel == TripletFeel.triplet,
+            "capo_fret": self.capo_fret,
+        }
+
+
 class TranscriptionRequest(BaseModel):
     youtube_url: HttpUrl
     instruments: List[Instrument] = Field(
@@ -18,6 +41,7 @@ class TranscriptionRequest(BaseModel):
         min_length=1,
     )
     tuning: Optional[str] = "auto"
+    constraints: TranscriptionConstraints = Field(default_factory=TranscriptionConstraints)
 
 
 class JobStatus(str, Enum):

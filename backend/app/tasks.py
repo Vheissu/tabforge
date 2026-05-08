@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 from pathlib import Path
 
@@ -51,8 +52,17 @@ def cleanup_temp_files(job_id: str) -> None:
 
 
 @celery_app.task(bind=True)
-def process_transcription(self, job_id: str, youtube_url: str, instruments: list, tuning: str):
+def process_transcription(
+    self,
+    job_id: str,
+    youtube_url: str,
+    instruments: list,
+    tuning: str,
+    constraints: dict | None = None,
+):
     from app.services.audio import analyze_audio, detect_tuning
+    from app.services.constraints import normalise_constraints
+    from app.services.draft import build_tab_draft
     from app.services.gp import create_guitar_pro_file
     from app.services.separation import separate_stems
     from app.services.storage import upload_to_storage
@@ -60,6 +70,8 @@ def process_transcription(self, job_id: str, youtube_url: str, instruments: list
     from app.services.youtube import extract_audio
 
     try:
+        tab_constraints = normalise_constraints(constraints)
+
         _run_async(_update_job(job_id, status="extracting", progress=5))
         metadata = extract_audio(youtube_url, TEMP_DIR / job_id)
         audio_path = metadata["audio_path"]
@@ -71,13 +83,20 @@ def process_transcription(self, job_id: str, youtube_url: str, instruments: list
         stems = separate_stems(audio_path, TEMP_DIR / job_id / "stems")
 
         _run_async(_update_job(job_id, status="analyzing", progress=35))
-        tempo, key = analyze_audio(audio_path)
+        detected_tempo, key = analyze_audio(audio_path)
+        tempo = tab_constraints["tempo_bpm"] or detected_tempo
 
         transcription: dict = {
             "title": metadata["title"],
             "artist": metadata["artist"],
             "tempo": tempo,
+            "detected_tempo": detected_tempo,
             "key": key,
+            "constraints": tab_constraints,
+            "time_signature": tab_constraints["time_signature"],
+            "pickup_bar_beats": tab_constraints["pickup_bar_beats"],
+            "triplet_feel": tab_constraints["triplet_feel"],
+            "capo_fret": tab_constraints["capo_fret"],
         }
 
         detected_tuning = tuning
@@ -107,16 +126,23 @@ def process_transcription(self, job_id: str, youtube_url: str, instruments: list
 
                 transcription["drums"] = transcribe_drums(str(stems["drums"]), tempo)
             else:
-                stem_path = stems["bass"] if instrument == "bass" else stems["other"]
+                stem_path = stems["bass"] if instrument == "bass" else stems.get("guitar", stems["other"])
                 transcription[instrument] = transcribe_pitched_instrument(
                     stem_path,
                     instrument,
                     tempo,
                     detected_tuning or "standard",
+                    tab_constraints,
                 )
 
         _run_async(_update_job(job_id, status="generating", progress=90))
         output_path = OUTPUT_DIR / f"{job_id}.gp5"
+        transcription["source_stems"] = {name: path.name for name, path in stems.items()}
+        draft = build_tab_draft(transcription, [str(instrument) for instrument in instruments])
+        (OUTPUT_DIR / f"{job_id}.draft.json").write_text(
+            json.dumps(draft, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
         create_guitar_pro_file(transcription, str(output_path))
 
         try:

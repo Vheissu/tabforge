@@ -7,6 +7,17 @@ import subprocess
 from app.core.config import get_settings
 
 
+REQUIRED_STEMS = {"drums", "bass", "other", "vocals"}
+
+
+def _collect_demucs_cli_stems(model_dir: Path) -> dict[str, Path]:
+    stems = {path.stem: path for path in model_dir.glob("*.wav")}
+    missing = sorted(REQUIRED_STEMS - stems.keys())
+    if missing:
+        raise RuntimeError(f"Demucs output missing stems: {', '.join(missing)}")
+    return stems
+
+
 def separate_stems(audio_path: Path, output_dir: Path) -> dict:
     settings = get_settings()
     if not settings.separation_enabled:
@@ -54,13 +65,4 @@ def separate_stems(audio_path: Path, output_dir: Path) -> dict:
         subprocess.run(cmd, check=True)
 
         model_dir = output_dir / model_name / audio_path.stem
-        stems = {
-            "drums": model_dir / "drums.wav",
-            "bass": model_dir / "bass.wav",
-            "other": model_dir / "other.wav",
-            "vocals": model_dir / "vocals.wav",
-        }
-        missing = [name for name, path in stems.items() if not path.exists()]
-        if missing:
-            raise RuntimeError(f"Demucs output missing stems: {', '.join(missing)}")
-        return stems
+        return _collect_demucs_cli_stems(model_dir)

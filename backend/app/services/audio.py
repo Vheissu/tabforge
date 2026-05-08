@@ -25,16 +25,22 @@ def detect_tuning(audio_path: Path) -> dict:
     Heuristic tuning detection.
     Returns a tuning label and supporting telemetry (offset + low pitch).
     """
-    y, sr = librosa.load(str(audio_path), sr=22050, mono=True)
+    y, sr = librosa.load(str(audio_path), sr=22050, mono=True, duration=45)
+    if y.size == 0:
+        return {"tuning": "standard", "offset_semitones": 0.0, "low_freq": None}
 
     try:
         offset = float(librosa.estimate_tuning(y=y, sr=sr))
     except Exception:
         offset = 0.0
 
-    f0 = librosa.yin(y, fmin=55, fmax=110, sr=sr)
-    f0 = f0[np.isfinite(f0)]
-    low_freq = float(np.median(f0)) if f0.size else None
+    try:
+        pitches, magnitudes = librosa.piptrack(y=y, sr=sr, fmin=55, fmax=120)
+        threshold = float(np.max(magnitudes)) * 0.25 if magnitudes.size else 0.0
+        candidates = pitches[(magnitudes >= threshold) & np.isfinite(pitches) & (pitches > 0)]
+        low_freq = float(np.percentile(candidates, 20)) if candidates.size else None
+    except Exception:
+        low_freq = None
 
     tuning = "standard"
     if -1.3 <= offset <= -0.7:

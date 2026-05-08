@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     task_soft_time_limit_seconds: int = 1500
 
     separation_enabled: bool = True
-    separation_model: str = "htdemucs_ft"
+    separation_model: str = "htdemucs_6s"
     separation_segment_seconds: float = 7.8
 
     temp_dir: str = "./temp"
