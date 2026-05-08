@@ -544,6 +544,42 @@ select:focus,
   padding-left: 20px;
 }
 
+.correction-bench {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-panel);
+  background: rgba(251, 246, 232, 0.72);
+  padding: 14px;
+}
+
+.correction-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.correction-heading h4 {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+}
+
+.correction-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.success-note {
+  border: 1px solid var(--green);
+  border-radius: var(--radius-control);
+  background: rgba(95, 111, 84, 0.12);
+  color: var(--green);
+  padding: 12px;
+}
+
 .job-aside {
   padding: 20px;
 }
@@ -625,17 +661,20 @@ select:focus,
   .hero-meta,
   .job-meta,
   .draft-facts,
+  .correction-grid,
   .constraint-grid {
     grid-template-columns: 1fr;
   }
 
   .settings-bar,
-  .draft-report-header {
+  .draft-report-header,
+  .correction-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .draft-report-header {
+  .draft-report-header,
+  .correction-heading {
     display: flex;
   }
 
