@@ -30,6 +30,14 @@ class ConstraintTests(unittest.TestCase):
         self.assertEqual(pickup_time_signature(1.0), (1, 4))
         self.assertEqual(pickup_time_signature(1.5), (3, 8))
 
+    def test_triplet_feel_auto_and_straight_are_not_truthy(self) -> None:
+        from app.services.constraints import normalise_constraints
+
+        self.assertFalse(normalise_constraints({"triplet_feel": "auto"})["triplet_feel"])
+        self.assertFalse(normalise_constraints({"triplet_feel": "straight"})["triplet_feel"])
+        self.assertFalse(normalise_constraints({"triplet_feel": None})["triplet_feel"])
+        self.assertTrue(normalise_constraints({"triplet_feel": "triplet"})["triplet_feel"])
+
 
 if __name__ == "__main__":
     unittest.main()

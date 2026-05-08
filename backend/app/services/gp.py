@@ -58,13 +58,33 @@ DRUM_STRING_VALUES = {
 def _duration_from_beats(beats: float) -> Duration:
     if beats >= 4:
         return Duration(1)
+    if beats >= 3:
+        return Duration(2, isDotted=True)
     if beats >= 2:
         return Duration(2)
+    if beats >= 1.5:
+        return Duration(4, isDotted=True)
     if beats >= 1:
         return Duration(4)
+    if beats >= 0.75:
+        return Duration(8, isDotted=True)
     if beats >= 0.5:
         return Duration(8)
     return Duration(16)
+
+
+def _duration_beats(duration: Duration) -> float:
+    beats = 4 / int(duration.value)
+    if getattr(duration, "isDotted", False):
+        beats *= 1.5
+    tuplet = getattr(duration, "tuplet", None)
+    if tuplet and getattr(tuplet, "enters", 1) and getattr(tuplet, "times", 1):
+        beats *= float(tuplet.times) / float(tuplet.enters)
+    return beats
+
+
+def _duration_slot_span(duration: Duration) -> int:
+    return max(1, int(round(_duration_beats(duration) * 4)))
 
 
 def _measure_lengths(transcription: dict[str, Any], total_measures: int) -> list[float]:
@@ -156,14 +176,33 @@ def _populate_track(track: Track, notes: list[dict], measure_lengths: list[float
         measure = Measure(track, header)
         voice = measure.voices[0]
         measure_notes = grouped.get(measure_idx, {})
+        occupied_slots = sorted(measure_notes)
+        total_slots = _slot_count(measure_length)
+        current_slot = 0
 
-        for slot in range(_slot_count(measure_length)):
+        while current_slot < total_slots:
             beat = Beat(voice)
-            beat.duration = Duration(16)
-            slot_notes = measure_notes.get(slot, [])
+            slot_notes = measure_notes.get(current_slot, [])
+            next_slot = next((slot for slot in occupied_slots if slot > current_slot), None)
+            remaining_slots = total_slots - current_slot
+
+            if slot_notes:
+                requested_slots = max(
+                    1,
+                    int(round(max(float(note.get("duration", 0.25)) for note in slot_notes) * 4)),
+                )
+                available_slots = remaining_slots if next_slot is None else max(1, next_slot - current_slot)
+                span_slots = min(available_slots, requested_slots)
+            else:
+                span_slots = remaining_slots if next_slot is None else max(1, next_slot - current_slot)
+
+            beat.duration = _duration_from_beats(span_slots / 4)
+            span_slots = min(remaining_slots, _duration_slot_span(beat.duration))
+
             if not slot_notes:
                 beat.status = BeatStatus.rest
                 voice.beats.append(beat)
+                current_slot += span_slots
                 continue
 
             beat.status = BeatStatus.normal
@@ -200,6 +239,7 @@ def _populate_track(track: Track, notes: list[dict], measure_lengths: list[float
             if not notes_to_write:
                 beat.status = BeatStatus.rest
                 voice.beats.append(beat)
+                current_slot += span_slots
                 continue
             for note_data in notes_to_write:
                 note = Note(beat)
@@ -215,6 +255,7 @@ def _populate_track(track: Track, notes: list[dict], measure_lengths: list[float
                 beat.notes.append(note)
 
             voice.beats.append(beat)
+            current_slot += span_slots
 
         track.measures.append(measure)
 

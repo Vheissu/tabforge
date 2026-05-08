@@ -6,6 +6,13 @@ import unittest
 from pathlib import Path
 
 
+def _beat_duration_beats(duration) -> float:
+    beats = 4 / int(duration.value)
+    if getattr(duration, "isDotted", False):
+        beats *= 1.5
+    return beats
+
+
 @unittest.skipUnless(importlib.util.find_spec("guitarpro"), "pyguitarpro is not installed")
 class GuitarProGenerationTests(unittest.TestCase):
     def test_writes_gp5_with_guitar_bass_and_drums(self) -> None:
@@ -262,7 +269,10 @@ class GuitarProGenerationTests(unittest.TestCase):
 
         self.assertEqual(song.measureHeaders[0].timeSignature.numerator, 3)
         self.assertEqual(len(song.tracks[0].measures), 2)
-        self.assertEqual(len(song.tracks[0].measures[0].voices[0].beats), 12)
+        self.assertEqual(
+            sum(_beat_duration_beats(beat.duration) for beat in song.tracks[0].measures[0].voices[0].beats),
+            3,
+        )
 
     def test_writes_pickup_bar_and_capo(self) -> None:
         from app.services.gp import create_guitar_pro_file
@@ -295,7 +305,39 @@ class GuitarProGenerationTests(unittest.TestCase):
         self.assertEqual(song.measureHeaders[0].timeSignature.numerator, 1)
         self.assertEqual(song.measureHeaders[0].timeSignature.denominator.value, 4)
         self.assertEqual(song.tracks[0].offset, 2)
-        self.assertEqual(len(song.tracks[0].measures[0].voices[0].beats), 4)
+        self.assertEqual(
+            sum(_beat_duration_beats(beat.duration) for beat in song.tracks[0].measures[0].voices[0].beats),
+            1,
+        )
+
+    def test_pitched_track_preserves_note_duration(self) -> None:
+        from app.services.gp import create_guitar_pro_file
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "duration.gp5"
+            create_guitar_pro_file(
+                {
+                    "title": "Duration",
+                    "artist": "Test",
+                    "tempo": 120,
+                    "tuning": "standard",
+                    "guitar": {
+                        "notes": [
+                            {"pitch": "E4", "start_beat": 0, "duration": 1, "string": 1, "fret": 0, "velocity": 100},
+                            {"pitch": "G4", "start_beat": 2, "duration": 0.5, "string": 1, "fret": 3, "velocity": 100},
+                        ]
+                    },
+                },
+                str(output_path),
+            )
+
+            import guitarpro
+
+            song = guitarpro.parse(str(output_path))
+            beats = song.tracks[0].measures[0].voices[0].beats
+
+        self.assertEqual(_beat_duration_beats(beats[0].duration), 1)
+        self.assertEqual(_beat_duration_beats(beats[2].duration), 0.5)
 
     def test_long_drum_track_with_duplicate_slots_parses_back(self) -> None:
         from app.services.gp import create_guitar_pro_file

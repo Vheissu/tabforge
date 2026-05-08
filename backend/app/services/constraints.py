@@ -7,6 +7,16 @@ from typing import Any
 SUPPORTED_TIME_SIGNATURES = {"4/4", "3/4", "6/8", "12/8"}
 
 
+def _normalise_triplet_feel(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+
+    label = str(value).strip().lower()
+    return label in {"triplet", "shuffle", "swing"}
+
+
 def normalise_constraints(raw: dict[str, Any] | None) -> dict[str, Any]:
     raw = raw or {}
 
@@ -29,8 +39,7 @@ def normalise_constraints(raw: dict[str, Any] | None) -> dict[str, Any]:
     tempo = raw.get("first_bar_tempo_bpm")
     tempo = int(tempo) if tempo is not None else None
 
-    triplet_feel = raw.get("triplet_feel")
-    triplet_feel = bool(triplet_feel) if triplet_feel is not None else False
+    triplet_feel = _normalise_triplet_feel(raw.get("triplet_feel"))
 
     return {
         "time_signature": time_signature,

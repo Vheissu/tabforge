@@ -146,7 +146,7 @@ async def regenerate_from_draft(
     draft = json.loads(draft_path.read_text(encoding="utf-8"))
     corrected = apply_draft_corrections(
         draft,
-        request_data.model_dump(exclude_none=True),
+        request_data.model_dump(exclude_unset=True),
     )
 
     backup_path = Path(settings.output_dir) / f"{job_id}.draft.previous.json"
