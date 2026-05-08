@@ -398,7 +398,8 @@ select:focus,
 .job-status,
 .progress-shell,
 .job-actions,
-.job-meta {
+.job-meta,
+.draft-report {
   margin-inline: 20px;
 }
 
@@ -440,6 +441,107 @@ select:focus,
   display: grid;
   gap: 6px;
   padding: 12px;
+}
+
+.draft-report {
+  display: grid;
+  gap: 16px;
+  border-top: 2px solid var(--rule);
+  padding-top: 18px;
+}
+
+.draft-report-header,
+.track-table-head,
+.track-row {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+}
+
+.draft-report-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.draft-report-header h3 {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.draft-report-body {
+  display: grid;
+  gap: 16px;
+}
+
+.draft-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.draft-facts > div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  background: rgba(251, 246, 232, 0.74);
+  padding: 12px;
+}
+
+.track-table {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.track-table-head,
+.track-row {
+  grid-template-columns: 1.1fr 1.4fr 0.7fr 0.7fr;
+  padding: 10px 12px;
+}
+
+.track-table-head {
+  background: var(--ink);
+  color: var(--panel);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.track-row {
+  border-top: 1px solid var(--rule-soft);
+  background: rgba(251, 246, 232, 0.58);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+.track-name {
+  font-family: var(--font-body);
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.warning-list,
+.next-actions {
+  border-left: 3px solid var(--amber);
+  padding-left: 14px;
+}
+
+.warning-list p,
+.next-actions ol {
+  margin: 8px 0 0;
+}
+
+.warning-list p {
+  color: var(--amber-dark);
+  line-height: 1.45;
+}
+
+.next-actions ol {
+  color: var(--muted);
+  line-height: 1.65;
+  padding-left: 20px;
 }
 
 .job-aside {
@@ -522,13 +624,24 @@ select:focus,
   .app-nav,
   .hero-meta,
   .job-meta,
+  .draft-facts,
   .constraint-grid {
     grid-template-columns: 1fr;
   }
 
-  .settings-bar {
+  .settings-bar,
+  .draft-report-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .draft-report-header {
+    display: flex;
+  }
+
+  .track-table-head,
+  .track-row {
+    grid-template-columns: 1fr 1fr;
   }
 
   .app-nav {

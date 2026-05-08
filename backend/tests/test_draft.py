@@ -53,6 +53,33 @@ class DraftTests(unittest.TestCase):
         self.assertIn("detected_tempo", warning_codes)
         self.assertIn("assumed_meter", warning_codes)
 
+    def test_summarises_draft_without_note_payloads(self) -> None:
+        from app.services.draft import summarise_draft
+
+        draft = {
+            "schema_version": "tabforge-draft-v1",
+            "metadata": {"title": "Summary"},
+            "constraints": {"tempo_source": "detected", "time_signature_source": "auto"},
+            "tuning": {"name": "standard"},
+            "sources": {"stems": {"guitar": "guitar.wav"}},
+            "tracks": [
+                {
+                    "name": "guitar",
+                    "source_stem": "guitar.wav",
+                    "statistics": {"note_count": 2, "chord_slot_count": 1, "last_beat": 4},
+                    "notes": [{"pitch": "E4"}, {"pitch": "G4"}],
+                }
+            ],
+            "quality": {"warnings": [{"code": "detected_tempo", "severity": "info", "message": "Tempo was inferred."}]},
+        }
+
+        summary = summarise_draft(draft)
+
+        self.assertEqual(summary["statistics"]["note_count"], 2)
+        self.assertEqual(summary["tracks"][0]["source_stem"], "guitar.wav")
+        self.assertNotIn("notes", summary["tracks"][0])
+        self.assertTrue(summary["quality"]["next_actions"])
+
 
 if __name__ == "__main__":
     unittest.main()

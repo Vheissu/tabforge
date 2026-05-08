@@ -13,6 +13,7 @@ from app.db.session import get_session
 from app.schemas import JobResponse, JobStatus, TranscriptionRequest
 from app.services.youtube import validate_youtube_url
 from app.celery_app import celery_app
+from app.services.draft import summarise_draft
 
 settings = get_settings()
 router = APIRouter(prefix="/api/v1")
@@ -111,3 +112,18 @@ async def download_draft(job_id: str, session=Depends(get_session)):
         media_type="application/json",
         filename=f"{job.title or job_id}.draft.json",
     )
+
+
+@router.get("/draft/{job_id}/summary")
+async def get_draft_summary(job_id: str, session=Depends(get_session)) -> dict:
+    job = await get_job(session, job_id)
+    if not job or job.status != JobStatus.completed.value:
+        raise HTTPException(status_code=404, detail="Draft summary not ready or job not found")
+
+    local_path = Path(settings.output_dir) / f"{job_id}.draft.json"
+    if not local_path.exists():
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    import json
+
+    return summarise_draft(json.loads(local_path.read_text(encoding="utf-8")))

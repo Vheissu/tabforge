@@ -1,12 +1,15 @@
 import { inject } from 'aurelia';
-import { ApiService, JobResponse } from '../../services/api-service';
+import { ApiService, DraftSummary, JobResponse } from '../../services/api-service';
 
 @inject(ApiService)
 export class Job {
   id = '';
   job: JobResponse | null = null;
+  draftSummary: DraftSummary | null = null;
   isLoading = true;
+  isLoadingDraft = false;
   error = '';
+  draftError = '';
   pollHandle: number | null = null;
   elapsedSeconds = 0;
 
@@ -50,6 +53,25 @@ export class Job {
     return this.api.getDraftUrl(this.id);
   }
 
+  get hasWarnings(): boolean {
+    return Boolean(this.draftSummary?.quality.warnings.length);
+  }
+
+  get tempoLabel(): string {
+    const summary = this.draftSummary;
+    if (!summary) return 'Pending';
+    const tempo = summary.metadata.tempo || summary.constraints.tempo_bpm;
+    if (!tempo) return 'Unknown';
+    return summary.constraints.tempo_source === 'user' ? `${tempo} BPM set` : `${tempo} BPM detected`;
+  }
+
+  get meterLabel(): string {
+    const constraints = this.draftSummary?.constraints;
+    if (!constraints) return 'Pending';
+    const meter = constraints.time_signature || '4/4';
+    return constraints.time_signature_source === 'user' ? `${meter} set` : `${meter} assumed`;
+  }
+
   async fetchStatus(): Promise<void> {
     if (!this.id) return;
     this.isLoading = true;
@@ -63,6 +85,9 @@ export class Job {
           this.pollHandle = null;
         }
       }
+      if (this.job.status === 'completed' && !this.draftSummary) {
+        await this.fetchDraftSummary();
+      }
     } catch (e) {
       if (e instanceof Error) {
         this.error = e.message;
@@ -71,6 +96,20 @@ export class Job {
       }
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  async fetchDraftSummary(): Promise<void> {
+    if (!this.id || this.isLoadingDraft) return;
+    this.isLoadingDraft = true;
+    this.draftError = '';
+
+    try {
+      this.draftSummary = await this.api.getDraftSummary(this.id);
+    } catch (e) {
+      this.draftError = e instanceof Error ? e.message : 'Unable to load draft summary.';
+    } finally {
+      this.isLoadingDraft = false;
     }
   }
 }

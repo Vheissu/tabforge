@@ -76,6 +76,68 @@ def _quality_warnings(transcription: dict[str, Any], instruments: list[str], sou
     return warnings
 
 
+def _next_actions(warnings: list[dict], tracks: list[dict]) -> list[str]:
+    actions: list[str] = []
+    warning_codes = {warning.get("code") for warning in warnings}
+
+    if "detected_tempo" in warning_codes:
+        actions.append("Set the first-bar tempo when you know the BPM.")
+    if "assumed_meter" in warning_codes:
+        actions.append("Set the first-bar meter for songs outside straight 4/4.")
+    if "mixed_guitar_stem" in warning_codes:
+        actions.append("Keep the 6-stem separator enabled so guitar can use a dedicated stem.")
+
+    for track in tracks:
+        stats = track.get("statistics", {})
+        name = track.get("name", "track")
+        note_count = int(stats.get("note_count") or 0)
+        last_beat = float(stats.get("last_beat") or 0)
+        density = note_count / last_beat if last_beat > 0 else 0
+        if note_count == 0:
+            actions.append(f"Check the {name} stem; no notes were written.")
+        elif density > 6:
+            actions.append(f"Review {name}; note density is high and may include transcription noise.")
+
+    return actions[:5]
+
+
+def summarise_draft(draft: dict[str, Any]) -> dict[str, Any]:
+    tracks = []
+    total_notes = 0
+    last_beat = 0.0
+
+    for track in draft.get("tracks", []):
+        stats = dict(track.get("statistics", {}))
+        total_notes += int(stats.get("note_count") or 0)
+        last_beat = max(last_beat, float(stats.get("last_beat") or 0))
+        tracks.append(
+            {
+                "name": track.get("name"),
+                "source_stem": track.get("source_stem") or track.get("source_track"),
+                "statistics": stats,
+            }
+        )
+
+    warnings = list(draft.get("quality", {}).get("warnings", []))
+    return {
+        "schema_version": draft.get("schema_version", SCHEMA_VERSION),
+        "metadata": draft.get("metadata", {}),
+        "constraints": draft.get("constraints", {}),
+        "tuning": draft.get("tuning", {}),
+        "sources": draft.get("sources", {}),
+        "tracks": tracks,
+        "quality": {
+            "warnings": warnings,
+            "next_actions": _next_actions(warnings, tracks),
+        },
+        "statistics": {
+            "track_count": len(tracks),
+            "note_count": total_notes,
+            "last_beat": round(last_beat, 3),
+        },
+    }
+
+
 def build_tab_draft(transcription: dict[str, Any], instruments: list[str]) -> dict[str, Any]:
     source_stems = dict(transcription.get("source_stems", {}))
     tracks = []

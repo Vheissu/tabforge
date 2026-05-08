@@ -20,6 +20,55 @@ export interface JobResponse {
   title?: string;
 }
 
+export interface DraftWarning {
+  code: string;
+  severity: 'info' | 'warning' | 'error';
+  message: string;
+}
+
+export interface DraftTrackSummary {
+  name: string;
+  source_stem?: string;
+  statistics: {
+    note_count: number;
+    chord_slot_count: number;
+    last_beat: number;
+  };
+}
+
+export interface DraftSummary {
+  schema_version: string;
+  metadata: {
+    title?: string;
+    artist?: string;
+    tempo?: number;
+    detected_tempo?: number;
+    key?: string;
+  };
+  constraints: {
+    time_signature?: string;
+    time_signature_source?: string;
+    pickup_bar_beats?: number | null;
+    tempo_bpm?: number | null;
+    tempo_source?: string;
+    triplet_feel?: boolean;
+    capo_fret?: number;
+  };
+  tuning: {
+    name: string;
+  };
+  tracks: DraftTrackSummary[];
+  quality: {
+    warnings: DraftWarning[];
+    next_actions: string[];
+  };
+  statistics: {
+    track_count: number;
+    note_count: number;
+    last_beat: number;
+  };
+}
+
 export class ApiService {
   private baseUrl = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -63,5 +112,13 @@ export class ApiService {
 
   getDraftUrl(jobId: string): string {
     return `${this.baseUrl}/draft/${encodeURIComponent(jobId)}`;
+  }
+
+  async getDraftSummary(jobId: string): Promise<DraftSummary> {
+    const response = await fetch(`${this.baseUrl}/draft/${encodeURIComponent(jobId)}/summary`);
+    if (!response.ok) {
+      throw await this.parseError(response, 'Failed to get draft summary');
+    }
+    return response.json();
   }
 }

@@ -48,6 +48,70 @@
         <span class="meta-value">${job?.status === 'completed' ? 'GP5 + draft' : 'Pending'}</span>
       </div>
     </div>
+
+    <section if.bind="job?.status === 'completed'" class="draft-report">
+      <div class="draft-report-header">
+        <div>
+          <span class="meta-label">Draft report</span>
+          <h3>${draftSummary ? draftSummary.statistics.note_count + ' notes written' : 'Loading draft report'}</h3>
+        </div>
+        <button type="button" class="ghost" click.trigger="fetchDraftSummary()" disabled.bind="isLoadingDraft">
+          Refresh report
+        </button>
+      </div>
+
+      <div if.bind="draftError" class="alert">
+        ${draftError}
+      </div>
+
+      <div if.bind="draftSummary" class="draft-report-body">
+        <div class="draft-facts">
+          <div>
+            <span class="meta-label">Tempo</span>
+            <span class="meta-value">${tempoLabel}</span>
+          </div>
+          <div>
+            <span class="meta-label">Meter</span>
+            <span class="meta-value">${meterLabel}</span>
+          </div>
+          <div>
+            <span class="meta-label">Tuning</span>
+            <span class="meta-value">${draftSummary.tuning.name}</span>
+          </div>
+          <div>
+            <span class="meta-label">Capo</span>
+            <span class="meta-value">${draftSummary.constraints.capo_fret || 0}</span>
+          </div>
+        </div>
+
+        <div class="track-table">
+          <div class="track-table-head">
+            <span>Part</span>
+            <span>Stem</span>
+            <span>Notes</span>
+            <span>Chords</span>
+          </div>
+          <div repeat.for="track of draftSummary.tracks" class="track-row">
+            <span class="track-name">${track.name}</span>
+            <span>${track.source_stem || 'none'}</span>
+            <span>${track.statistics.note_count}</span>
+            <span>${track.statistics.chord_slot_count}</span>
+          </div>
+        </div>
+
+        <div if.bind="hasWarnings" class="warning-list">
+          <span class="meta-label">Warnings</span>
+          <p repeat.for="warning of draftSummary.quality.warnings">${warning.message}</p>
+        </div>
+
+        <div if.bind="draftSummary.quality.next_actions.length" class="next-actions">
+          <span class="meta-label">Next better run</span>
+          <ol>
+            <li repeat.for="action of draftSummary.quality.next_actions">${action}</li>
+          </ol>
+        </div>
+      </div>
+    </section>
   </div>
 
   <aside class="job-aside">

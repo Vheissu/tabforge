@@ -34,6 +34,22 @@ class TranscriptionConstraints(BaseModel):
         }
 
 
+class TrackCorrection(BaseModel):
+    enabled: bool = True
+    min_velocity: Optional[int] = Field(default=None, ge=1, le=127)
+    max_notes_per_slot: Optional[int] = Field(default=None, ge=1, le=7)
+
+
+class DraftCorrectionRequest(BaseModel):
+    tempo_bpm: Optional[int] = Field(default=None, ge=40, le=260)
+    time_signature: Optional[str] = Field(default=None, pattern="^(4/4|3/4|6/8|12/8)$")
+    pickup_bar_beats: Optional[float] = Field(default=None, ge=0, le=8)
+    tuning: Optional[str] = Field(default=None, pattern="^(standard|drop_d|half_step_down|full_step_down)$")
+    capo_fret: Optional[int] = Field(default=None, ge=0, le=12)
+    triplet_feel: Optional[TripletFeel] = None
+    tracks: dict[str, TrackCorrection] = Field(default_factory=dict)
+
+
 class TranscriptionRequest(BaseModel):
     youtube_url: HttpUrl
     instruments: List[Instrument] = Field(
