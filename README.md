@@ -26,7 +26,7 @@ docker compose --profile gpu up -d --build
 3. Open the app:
 
 ```bash
-open http://localhost:8080
+open http://localhost:8090
 ```
 
 ## Local Dev (optional)
