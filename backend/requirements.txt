@@ -20,3 +20,6 @@ yt-dlp>=2025.12.0
 # Utilities
 python-dotenv>=1.0.0
 httpx>=0.28.0
+
+# GP5 regeneration from corrected drafts
+pyguitarpro>=0.10.1
