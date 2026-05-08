@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     minio_bucket: str = "tabforge"
 
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3-flash-preview"
     gemini_refinement_timeout_seconds: int = 45
 
     max_duration_seconds: int = 600

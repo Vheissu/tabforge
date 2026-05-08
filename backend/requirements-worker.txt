@@ -7,7 +7,7 @@ numpy>=1.26.0,<2.0
 soundfile>=0.12.1
 
 # AI refinement
-google-generativeai>=0.8.0
+google-genai>=1.0.0
 
 # Guitar Pro
 pyguitarpro>=0.10.1

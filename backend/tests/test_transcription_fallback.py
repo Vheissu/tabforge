@@ -62,22 +62,35 @@ class TranscriptionFallbackTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("pydantic_settings"), "API dependencies are not installed")
 class GeminiRefinementTests(unittest.TestCase):
+    def test_parse_refinement_response_accepts_fenced_json(self) -> None:
+        from app.services.transcription import _parse_refinement_response
+
+        self.assertEqual(_parse_refinement_response("```json\n{\"ok\": true}\n```"), {"ok": True})
+
     def test_refinement_errors_do_not_fail_transcription(self) -> None:
         from app.services import transcription
 
-        class FakeModel:
-            def generate_content(self, *_args, **_kwargs):
+        class FakeModels:
+            def generate_content(self, **_kwargs):
                 raise RuntimeError("model unavailable")
 
-        fake_genai = types.ModuleType("google.generativeai")
-        fake_genai.configure = lambda **_kwargs: None
-        fake_genai.GenerativeModel = lambda _model_name: FakeModel()
-        fake_genai.upload_file = lambda _path: object()
+        class FakeClient:
+            files = SimpleNamespace(upload=lambda **_kwargs: object())
+            models = FakeModels()
+
+            def __init__(self, **_kwargs):
+                pass
+
+            def close(self):
+                pass
+
+        fake_genai = types.ModuleType("google.genai")
+        fake_genai.Client = FakeClient
         fake_google = types.ModuleType("google")
-        fake_google.generativeai = fake_genai
+        fake_google.genai = fake_genai
 
         settings = SimpleNamespace(gemini_api_key="test-key", gemini_model="bad-model")
-        with patch.dict(sys.modules, {"google": fake_google, "google.generativeai": fake_genai}):
+        with patch.dict(sys.modules, {"google": fake_google, "google.genai": fake_genai}):
             with patch.object(transcription, "settings", settings):
                 result = transcription.refine_with_gemini(Path("missing.wav"), [], "guitar", 120)
 
@@ -86,27 +99,35 @@ class GeminiRefinementTests(unittest.TestCase):
     def test_refinement_timeout_does_not_fail_transcription(self) -> None:
         from app.services import transcription
 
-        class FakeModel:
-            def generate_content(self, *_args, **_kwargs):
+        class FakeModels:
+            def generate_content(self, **_kwargs):
                 return SimpleNamespace(text="{}")
 
         def slow_upload(_path):
             time.sleep(2)
             return object()
 
-        fake_genai = types.ModuleType("google.generativeai")
-        fake_genai.configure = lambda **_kwargs: None
-        fake_genai.GenerativeModel = lambda _model_name: FakeModel()
-        fake_genai.upload_file = slow_upload
+        class FakeClient:
+            files = SimpleNamespace(upload=lambda **kwargs: slow_upload(kwargs["file"]))
+            models = FakeModels()
+
+            def __init__(self, **_kwargs):
+                pass
+
+            def close(self):
+                pass
+
+        fake_genai = types.ModuleType("google.genai")
+        fake_genai.Client = FakeClient
         fake_google = types.ModuleType("google")
-        fake_google.generativeai = fake_genai
+        fake_google.genai = fake_genai
 
         settings = SimpleNamespace(
             gemini_api_key="test-key",
-            gemini_model="gemini-2.5-flash",
+            gemini_model="gemini-3-flash-preview",
             gemini_refinement_timeout_seconds=1,
         )
-        with patch.dict(sys.modules, {"google": fake_google, "google.generativeai": fake_genai}):
+        with patch.dict(sys.modules, {"google": fake_google, "google.genai": fake_genai}):
             with patch.object(transcription, "settings", settings):
                 started_at = time.monotonic()
                 result = transcription.refine_with_gemini(Path("slow.wav"), [], "guitar", 120)

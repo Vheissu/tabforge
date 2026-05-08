@@ -39,6 +39,30 @@ def _refinement_deadline(timeout_seconds: int):
             signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
 
 
+def _parse_refinement_response(text: str | None) -> dict | None:
+    if not text:
+        return None
+
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+
+    if not stripped.startswith("{"):
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        stripped = stripped[start : end + 1]
+
+    parsed = json.loads(stripped)
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _frequency_range(instrument: str) -> tuple[float, float]:
     freq_ranges = {
         "bass": (30.0, 400.0),
@@ -262,17 +286,20 @@ def refine_with_gemini(audio_path: Path, notes: list[dict], instrument: str, tem
         return None
 
     try:
-        import google.generativeai as genai
+        from google import genai
     except Exception:
         return None
 
+    client = None
     try:
         timeout_seconds = settings.gemini_refinement_timeout_seconds
         with _refinement_deadline(timeout_seconds):
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel(settings.gemini_model)
+            client = genai.Client(
+                api_key=settings.gemini_api_key,
+                http_options={"timeout": timeout_seconds * 1000},
+            )
 
-            audio_file = genai.upload_file(str(audio_path))
+            audio_file = client.files.upload(file=str(audio_path))
             note_summary = json.dumps(notes[:50])
 
             prompt = (
@@ -287,14 +314,20 @@ def refine_with_gemini(audio_path: Path, notes: list[dict], instrument: str, tem
                 "Respond with JSON only, no markdown."
             )
 
-            response = model.generate_content(
-                [prompt, audio_file],
-                generation_config={"temperature": 0.1},
-                request_options={"timeout": timeout_seconds},
+            response = client.models.generate_content(
+                model=settings.gemini_model,
+                contents=[prompt, audio_file],
+                config={"temperature": 0.1, "response_mime_type": "application/json"},
             )
-            return json.loads(response.text)
+            return _parse_refinement_response(response.text)
     except Exception:
         return None
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 def transcribe_pitched_instrument(audio_path: Path, instrument: str, tempo: int, tuning: str = "standard") -> dict[str, Any]:
