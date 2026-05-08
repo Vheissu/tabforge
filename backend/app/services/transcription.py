@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import signal
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -241,39 +242,54 @@ def _audio_to_midi_with_spectral_fallback(audio_path: Path, instrument: str) -> 
     return notes[:512]
 
 
+@lru_cache(maxsize=1)
+def _get_basic_pitch_model():
+    from basic_pitch import ICASSP_2022_MODEL_PATH
+    from basic_pitch.inference import Model
+
+    return Model(ICASSP_2022_MODEL_PATH)
+
+
+def _normalize_basic_pitch_event(event) -> dict:
+    if isinstance(event, dict):
+        velocity = event.get("velocity", event.get("amplitude", 0.8))
+        if isinstance(velocity, float) and velocity <= 1.0:
+            velocity = int(max(1, min(127, round(velocity * 127))))
+        return {
+            "start_time": float(event["start_time"]),
+            "end_time": float(event["end_time"]),
+            "pitch_midi": int(event["pitch_midi"]),
+            "velocity": int(max(1, min(127, velocity))),
+        }
+
+    start_time, end_time, pitch_midi, amplitude, *_ = event
+    return {
+        "start_time": float(start_time),
+        "end_time": float(end_time),
+        "pitch_midi": int(pitch_midi),
+        "velocity": int(max(1, min(127, round(float(amplitude) * 127)))),
+    }
+
+
 def audio_to_midi(audio_path: Path, instrument: str) -> list[dict]:
     try:
         from basic_pitch.inference import predict
-        from basic_pitch import ICASSP_2022_MODEL_PATH
-        import tensorflow as tf
     except Exception:
         return _audio_to_midi_with_librosa(audio_path, instrument)
-
-    model = tf.saved_model.load(str(ICASSP_2022_MODEL_PATH))
 
     min_freq, max_freq = _frequency_range(instrument)
 
     _, _, note_events = predict(
         str(audio_path),
-        model,
+        _get_basic_pitch_model(),
         minimum_frequency=min_freq,
         maximum_frequency=max_freq,
-        minimum_note_length=0.05,
+        minimum_note_length=50.0,
         onset_threshold=0.5,
         frame_threshold=0.3,
     )
 
-    normalized = []
-    for event in note_events:
-        if isinstance(event, dict):
-            normalized.append(event)
-        else:
-            normalized.append({
-                "start_time": float(event.start_time),
-                "end_time": float(event.end_time),
-                "pitch_midi": int(event.pitch_midi),
-                "velocity": int(event.velocity),
-            })
+    normalized = sorted((_normalize_basic_pitch_event(event) for event in note_events), key=lambda n: n["start_time"])
 
     if normalized:
         return normalized

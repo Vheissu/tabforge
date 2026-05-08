@@ -148,6 +148,35 @@ class GuitarProGenerationTests(unittest.TestCase):
         self.assertEqual([track.name for track in song.tracks], ["Bass"])
         self.assertEqual(len(song.tracks[0].measures), 80)
 
+    def test_pitched_track_preserves_multiple_strings_in_same_slot(self) -> None:
+        from app.services.gp import create_guitar_pro_file
+
+        notes = [
+            {"pitch": "E4", "start_beat": 0, "duration": 1, "string": 1, "fret": 0, "velocity": 90},
+            {"pitch": "B3", "start_beat": 0, "duration": 1, "string": 2, "fret": 0, "velocity": 85},
+            {"pitch": "G3", "start_beat": 0, "duration": 1, "string": 3, "fret": 0, "velocity": 80},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "chord.gp5"
+            create_guitar_pro_file(
+                {
+                    "title": "Chord",
+                    "artist": "Test",
+                    "tempo": 120,
+                    "tuning": "standard",
+                    "guitar": {"notes": notes},
+                },
+                str(output_path),
+            )
+
+            import guitarpro
+
+            song = guitarpro.parse(str(output_path))
+            first_beat = song.tracks[0].measures[0].voices[0].beats[0]
+
+        self.assertEqual(len(first_beat.notes), 3)
+
     def test_long_drum_track_with_duplicate_slots_parses_back(self) -> None:
         from app.services.gp import create_guitar_pro_file
 

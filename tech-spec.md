@@ -98,7 +98,7 @@ An open-source application that accepts a YouTube video URL, extracts the audio,
 | **JS Runtime** | Deno | Latest | Required by yt-dlp for YouTube |
 | **Source Separation** | Demucs v4 | htdemucs_ft | Stem isolation |
 | **Pitch Detection** | Basic Pitch | Latest | Audio to MIDI |
-| **AI Transcription** | Gemini 3 Flash | gemini-3-flash | Note refinement and technique detection |
+| **AI Transcription** | Gemini 3 Flash | gemini-3-flash-preview | Note refinement and technique detection |
 | **GP File Generation** | PyGuitarPro | 0.10.1 | Create .gp5 files |
 | **Database** | PostgreSQL | 16+ | Job metadata, user data |
 | **Object Storage** | MinIO | Latest | Audio and output file storage |
@@ -245,7 +245,7 @@ def audio_to_midi(audio_path: Path, instrument: str) -> tuple:
 Use Gemini 3 Flash for speed and cost efficiency. It has native audio understanding and can refine transcriptions.
 
 ```python
-import google.generativeai as genai
+from google import genai
 from pathlib import Path
 import json
 

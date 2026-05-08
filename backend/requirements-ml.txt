@@ -1,3 +1,6 @@
+# Basic Pitch's resampy dependency still imports pkg_resources at runtime.
+setuptools<81
+
 # ML deps are only installed on Python <3.12 (wheels not consistently available on 3.12 yet).
 basic-pitch>=0.3.0; python_version < "3.12"
 tensorflow>=2.4.1,<2.15.1; python_version < "3.12"

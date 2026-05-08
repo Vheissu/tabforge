@@ -116,7 +116,19 @@ def _populate_track(track: Track, notes: list[dict], total_measures: int, is_dru
                 continue
 
             beat.status = BeatStatus.normal
-            notes_to_write = [max(slot_notes, key=lambda n: int(n.get("velocity", 100)))]
+            if is_drum:
+                notes_to_write = [max(slot_notes, key=lambda n: int(n.get("velocity", 100)))]
+            else:
+                by_string: dict[int, dict] = {}
+                for note_data in slot_notes:
+                    string = max(1, min(len(track.strings), int(note_data.get("string") or 1)))
+                    if string not in by_string or int(note_data.get("velocity", 100)) > int(by_string[string].get("velocity", 100)):
+                        by_string[string] = note_data
+                notes_to_write = sorted(
+                    by_string.values(),
+                    key=lambda n: int(n.get("velocity", 100)),
+                    reverse=True,
+                )[: len(track.strings)]
             for note_data in notes_to_write:
                 note = Note(beat)
                 note.type = NoteType.normal

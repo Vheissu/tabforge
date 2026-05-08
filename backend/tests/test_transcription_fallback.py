@@ -136,5 +136,25 @@ class GeminiRefinementTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started_at, 1.8)
 
 
+@unittest.skipUnless(importlib.util.find_spec("pydantic_settings"), "API dependencies are not installed")
+class BasicPitchNormalizationTests(unittest.TestCase):
+    def test_tuple_events_are_converted_from_basic_pitch_output(self) -> None:
+        from app.services.transcription import _normalize_basic_pitch_event
+
+        event = (1.25, 1.75, 64, 0.5, [0, 1])
+
+        self.assertEqual(
+            _normalize_basic_pitch_event(event),
+            {"start_time": 1.25, "end_time": 1.75, "pitch_midi": 64, "velocity": 64},
+        )
+
+    def test_dict_amplitude_is_converted_to_velocity(self) -> None:
+        from app.services.transcription import _normalize_basic_pitch_event
+
+        event = {"start_time": 0, "end_time": 1, "pitch_midi": 40, "amplitude": 0.75}
+
+        self.assertEqual(_normalize_basic_pitch_event(event)["velocity"], 95)
+
+
 if __name__ == "__main__":
     unittest.main()

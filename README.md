@@ -66,7 +66,7 @@ celery -A app.tasks.celery_app worker --loglevel=info
 - Docker stores temp audio and generated GP5 files in named volumes shared by the API and worker, so downloads still work when object storage upload is unavailable.
 - Docker stores downloaded separation model weights in a named worker cache volume, so repeated worker restarts do not need to fetch them again.
 - Tuning can be set to `auto` (default) to let the server detect standard/Drop D/half-step/full-step based on pitch analysis.
-- On Apple Silicon (linux/arm64) Docker builds skip basic-pitch/tensorflow because wheels are unavailable; pitched instruments use a simpler librosa fallback instead.
-- Use Python 3.11 for local worker development if you want basic-pitch/tensorflow support. Newer Python versions may run the API but skip pitched-instrument transcription models.
+- Apple Silicon Docker workers install Basic Pitch with the linux/arm64 TensorFlow CPU runtime. If Basic Pitch is unavailable, pitched instruments fall back to simpler librosa heuristics, but that fallback is not expected to produce useful full-song tabs.
+- Use Python 3.11 for local worker development if you want Basic Pitch/TensorFlow support. Newer Python versions may run the API but skip pitched-instrument transcription models.
 - Separation is the slowest step on CPU (especially Apple Silicon). You can speed it up by setting `SEPARATION_MODEL=htdemucs` or by skipping separation entirely with `SEPARATION_ENABLED=false` (lower accuracy).
 - Default maximum video duration is 10 minutes; update `MAX_DURATION_SECONDS` via env if needed.

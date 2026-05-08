@@ -27,17 +27,14 @@ ENV TORCH_HOME="/app/.cache/torch"
 ENV MPLCONFIGDIR="/app/.cache/matplotlib"
 
 COPY requirements.txt requirements-worker.txt requirements-ml.txt ./
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel \
     && pip install --no-cache-dir cython "numpy<2.0" \
     && pip install --no-cache-dir torch==2.8.0+cpu torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements-worker.txt
 
-# TensorFlow wheels are not published for linux/arm64; only install on amd64.
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-      pip install --no-cache-dir -r requirements-ml.txt; \
-    else \
-      echo "Skipping basic-pitch/tensorflow on $TARGETARCH"; \
-    fi
+# Basic Pitch resolves a linux/arm64 TensorFlow CPU runtime, so Apple Silicon
+# Docker workers should use the real AMT model instead of the librosa fallback.
+RUN pip install --no-cache-dir -r requirements-ml.txt
 
 RUN useradd --create-home --shell /usr/sbin/nologin app \
     && mkdir -p /app/temp /app/output /app/.cache \
