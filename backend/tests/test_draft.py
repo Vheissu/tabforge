@@ -80,6 +80,47 @@ class DraftTests(unittest.TestCase):
         self.assertNotIn("notes", summary["tracks"][0])
         self.assertTrue(summary["quality"]["next_actions"])
 
+    def test_applies_corrections_and_revoices_pitched_tracks(self) -> None:
+        from app.services.draft import apply_draft_corrections, draft_to_transcription
+
+        draft = {
+            "schema_version": "tabforge-draft-v1",
+            "metadata": {"title": "Correct Me", "artist": "Band", "tempo": 118},
+            "constraints": {"time_signature": "4/4", "tempo_source": "detected", "capo_fret": 0},
+            "tuning": {"name": "standard"},
+            "tracks": [
+                {
+                    "name": "guitar",
+                    "source_stem": "guitar.wav",
+                    "statistics": {},
+                    "notes": [
+                        {"pitch": "E4", "start_beat": 0, "duration": 0.25, "string": 1, "fret": 0, "velocity": 20},
+                        {"pitch": "F#4", "start_beat": 0.25, "duration": 0.25, "string": 1, "fret": 2, "velocity": 100},
+                    ],
+                }
+            ],
+            "quality": {"warnings": []},
+        }
+
+        corrected = apply_draft_corrections(
+            draft,
+            {
+                "tempo_bpm": 120,
+                "time_signature": "3/4",
+                "capo_fret": 2,
+                "tracks": {"guitar": {"min_velocity": 50}},
+            },
+        )
+        transcription = draft_to_transcription(corrected)
+
+        self.assertEqual(corrected["metadata"]["tempo"], 120)
+        self.assertEqual(corrected["constraints"]["time_signature"], "3/4")
+        self.assertEqual(corrected["tracks"][0]["statistics"]["note_count"], 1)
+        self.assertEqual(corrected["tracks"][0]["notes"][0]["fret"], 0)
+        self.assertEqual(transcription["tempo"], 120)
+        self.assertEqual(transcription["time_signature"], "3/4")
+        self.assertEqual(transcription["capo_fret"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

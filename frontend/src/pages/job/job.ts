@@ -1,5 +1,5 @@
 import { inject } from 'aurelia';
-import { ApiService, DraftSummary, JobResponse } from '../../services/api-service';
+import { ApiService, DraftCorrectionRequest, DraftSummary, JobResponse } from '../../services/api-service';
 
 @inject(ApiService)
 export class Job {
@@ -8,8 +8,19 @@ export class Job {
   draftSummary: DraftSummary | null = null;
   isLoading = true;
   isLoadingDraft = false;
+  isRegenerating = false;
   error = '';
   draftError = '';
+  correctionError = '';
+  correctionMessage = '';
+  correctionTempo = '';
+  correctionMeter = '4/4';
+  correctionPickup = '';
+  correctionTuning = 'standard';
+  correctionCapo = 0;
+  guitarMinVelocity = 24;
+  guitarMaxNotes = 6;
+  bassMinVelocity = 28;
   pollHandle: number | null = null;
   elapsedSeconds = 0;
 
@@ -72,6 +83,17 @@ export class Job {
     return constraints.time_signature_source === 'user' ? `${meter} set` : `${meter} assumed`;
   }
 
+  hydrateCorrectionFields(): void {
+    if (!this.draftSummary) return;
+    this.correctionTempo = String(this.draftSummary.metadata.tempo || this.draftSummary.constraints.tempo_bpm || '');
+    this.correctionMeter = this.draftSummary.constraints.time_signature || '4/4';
+    this.correctionPickup = this.draftSummary.constraints.pickup_bar_beats == null
+      ? ''
+      : String(this.draftSummary.constraints.pickup_bar_beats);
+    this.correctionTuning = this.draftSummary.tuning.name || 'standard';
+    this.correctionCapo = this.draftSummary.constraints.capo_fret || 0;
+  }
+
   async fetchStatus(): Promise<void> {
     if (!this.id) return;
     this.isLoading = true;
@@ -106,10 +128,47 @@ export class Job {
 
     try {
       this.draftSummary = await this.api.getDraftSummary(this.id);
+      this.hydrateCorrectionFields();
     } catch (e) {
       this.draftError = e instanceof Error ? e.message : 'Unable to load draft summary.';
     } finally {
       this.isLoadingDraft = false;
+    }
+  }
+
+  async regenerateDraft(): Promise<void> {
+    if (!this.id || this.isRegenerating) return;
+    this.isRegenerating = true;
+    this.correctionError = '';
+    this.correctionMessage = '';
+
+    const request: DraftCorrectionRequest = {
+      tempo_bpm: this.correctionTempo === '' ? null : Number(this.correctionTempo),
+      time_signature: this.correctionMeter,
+      pickup_bar_beats: this.correctionPickup === '' ? null : Number(this.correctionPickup),
+      tuning: this.correctionTuning,
+      capo_fret: Number(this.correctionCapo) || 0,
+      tracks: {
+        guitar: {
+          min_velocity: Number(this.guitarMinVelocity) || null,
+          max_notes_per_slot: Number(this.guitarMaxNotes) || null,
+        },
+        bass: {
+          min_velocity: Number(this.bassMinVelocity) || null,
+          max_notes_per_slot: 1,
+        },
+      },
+    };
+
+    try {
+      this.draftSummary = await this.api.regenerateDraft(this.id, request);
+      this.hydrateCorrectionFields();
+      this.correctionMessage = 'GP5 regenerated from corrected draft.';
+      await this.fetchStatus();
+    } catch (e) {
+      this.correctionError = e instanceof Error ? e.message : 'Unable to regenerate GP5.';
+    } finally {
+      this.isRegenerating = false;
     }
   }
 }

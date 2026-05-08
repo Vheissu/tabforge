@@ -69,6 +69,22 @@ export interface DraftSummary {
   };
 }
 
+export interface DraftTrackCorrection {
+  enabled?: boolean;
+  min_velocity?: number | null;
+  max_notes_per_slot?: number | null;
+}
+
+export interface DraftCorrectionRequest {
+  tempo_bpm?: number | null;
+  time_signature?: string | null;
+  pickup_bar_beats?: number | null;
+  tuning?: string | null;
+  capo_fret?: number | null;
+  triplet_feel?: 'auto' | 'straight' | 'triplet' | null;
+  tracks?: Record<string, DraftTrackCorrection>;
+}
+
 export class ApiService {
   private baseUrl = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -118,6 +134,18 @@ export class ApiService {
     const response = await fetch(`${this.baseUrl}/draft/${encodeURIComponent(jobId)}/summary`);
     if (!response.ok) {
       throw await this.parseError(response, 'Failed to get draft summary');
+    }
+    return response.json();
+  }
+
+  async regenerateDraft(jobId: string, request: DraftCorrectionRequest): Promise<DraftSummary> {
+    const response = await fetch(`${this.baseUrl}/draft/${encodeURIComponent(jobId)}/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      throw await this.parseError(response, 'Failed to regenerate draft');
     }
     return response.json();
   }
