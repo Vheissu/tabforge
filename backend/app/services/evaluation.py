@@ -222,6 +222,79 @@ def _sample_events(notes: list[dict[str, Any]], limit: int = 5) -> list[dict[str
     return [_compact_event(note) for note in sorted(notes, key=lambda item: float(item.get("start_beat", 0)))[:limit]]
 
 
+def _draft_track_names(draft: dict[str, Any]) -> set[str]:
+    return {str(track.get("name")) for track in draft.get("tracks", [])}
+
+
+def _draft_bounds(draft: dict[str, Any]) -> tuple[float, float]:
+    starts: list[float] = []
+    ends: list[float] = []
+    for track in draft.get("tracks", []):
+        for note in track.get("notes", []):
+            start = float(note.get("start_beat", 0))
+            starts.append(start)
+            ends.append(start + float(note.get("duration", 0)))
+    if not starts:
+        return 0.0, 0.0
+    return min(starts), max(ends)
+
+
+def _alignment_offsets(
+    reference: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    grid_beats: float,
+    max_offset_beats: float | None,
+) -> list[float]:
+    if grid_beats <= 0:
+        raise ValueError("grid_beats must be greater than 0")
+
+    reference_tracks = _track_by_name(reference)
+    candidate_tracks = _track_by_name(candidate)
+    offsets = {0.0}
+    for track_name in set(reference_tracks) & set(candidate_tracks):
+        reference_notes = reference_tracks[track_name].get("notes", [])
+        candidate_notes = candidate_tracks[track_name].get("notes", [])
+        by_kind: dict[str, list[dict[str, Any]]] = {}
+        for candidate_note in candidate_notes:
+            by_kind.setdefault(_event_kind(candidate_note), []).append(candidate_note)
+        for reference_note in reference_notes:
+            reference_start = float(reference_note.get("start_beat", 0))
+            for candidate_note in by_kind.get(_event_kind(reference_note), []):
+                candidate_start = float(candidate_note.get("start_beat", 0))
+                offset = round(round((candidate_start - reference_start) / grid_beats) * grid_beats, 3)
+                if max_offset_beats is not None and abs(offset) > max_offset_beats:
+                    continue
+                offsets.add(offset)
+    return sorted(offsets)
+
+
+def _shift_candidate_window(
+    reference: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    offset_beats: float,
+    tolerance_beats: float,
+) -> dict[str, Any]:
+    reference_min, reference_max = _draft_bounds(reference)
+    reference_track_names = _draft_track_names(reference)
+    shifted_tracks: list[dict[str, Any]] = []
+
+    for track in candidate.get("tracks", []):
+        if str(track.get("name")) not in reference_track_names:
+            continue
+        shifted_notes: list[dict[str, Any]] = []
+        for note in track.get("notes", []):
+            shifted_start = round(float(note.get("start_beat", 0)) - offset_beats, 3)
+            if reference_min - tolerance_beats <= shifted_start <= reference_max + tolerance_beats:
+                shifted = dict(note)
+                shifted["start_beat"] = shifted_start
+                shifted_notes.append(shifted)
+        shifted_tracks.append({**track, "notes": shifted_notes})
+
+    return {**candidate, "tracks": shifted_tracks}
+
+
 def _strict_diagnostics(
     track_analyses: dict[str, dict[str, Any]],
     matched_pairs: list[tuple[dict[str, Any], dict[str, Any]]],
@@ -357,3 +430,60 @@ def compare_drafts(
             duration_tolerance_beats,
         )
     return result
+
+
+def scan_reference_window(
+    reference: dict[str, Any],
+    candidate: dict[str, Any],
+    tolerance_beats: float = 0.25,
+    duration_tolerance_beats: float = 0.25,
+    strict: bool = False,
+    grid_beats: float = 0.25,
+    max_offset_beats: float | None = None,
+    top_results: int = 5,
+) -> dict[str, Any]:
+    offsets = _alignment_offsets(
+        reference,
+        candidate,
+        grid_beats=grid_beats,
+        max_offset_beats=max_offset_beats,
+    )
+
+    scored: list[dict[str, Any]] = []
+    for offset in offsets:
+        windowed = _shift_candidate_window(
+            reference,
+            candidate,
+            offset_beats=offset,
+            tolerance_beats=tolerance_beats,
+        )
+        result = compare_drafts(
+            reference,
+            windowed,
+            tolerance_beats=tolerance_beats,
+            duration_tolerance_beats=duration_tolerance_beats,
+            strict=strict,
+        )
+        scored.append(
+            {
+                "alignment_offset_beats": offset,
+                "candidate_window_notes": sum(len(track.get("notes", [])) for track in windowed.get("tracks", [])),
+                "result": result,
+            }
+        )
+
+    scored.sort(
+        key=lambda item: (
+            float(item["result"].get("overall", {}).get("f1", 0)),
+            float(item["result"].get("strict_accuracy", 0)),
+            -abs(float(item["alignment_offset_beats"])),
+        ),
+        reverse=True,
+    )
+    best = scored[0] if scored else None
+    return {
+        "alignment_grid_beats": grid_beats,
+        "offsets_tested": len(offsets),
+        "best": best,
+        "top_results": scored[:top_results],
+    }

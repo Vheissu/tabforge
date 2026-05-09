@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.services.draft import SCHEMA_VERSION, _track_stats
-from app.services.fretboard import midi_to_note_name
+from app.services.fretboard import get_tuning_midi, midi_to_note_name
 from app.services.gp import DRUM_NOTE_VALUES
 
 
@@ -52,6 +52,22 @@ def _track_name(track) -> str:
     return "guitar"
 
 
+def _normalised_track_tuning(track) -> list[int]:
+    return [int(string.value) for string in sorted(track.strings, key=lambda item: int(item.number), reverse=True)]
+
+
+def _detect_imported_tuning(tracks: list[dict[str, Any]]) -> str:
+    candidates = ("standard", "drop_d", "half_step_down", "full_step_down")
+    pitched_tracks = [track for track in tracks if track.get("name") in {"guitar", "bass"}]
+    for tuning in candidates:
+        if pitched_tracks and all(
+            track.get("tuning_midi") == get_tuning_midi(tuning, is_bass=track.get("name") == "bass")
+            for track in pitched_tracks
+        ):
+            return tuning
+    return "imported"
+
+
 def _string_pitch(track, string_number: int) -> int | None:
     for string in track.strings:
         if string.number == string_number:
@@ -63,9 +79,9 @@ def _is_tied_note(note) -> bool:
     return getattr(getattr(note, "type", None), "name", "") == "tie"
 
 
-def _extend_previous_tied_note(notes: list[dict[str, Any]], string: int, duration: float) -> bool:
+def _extend_previous_tied_note(notes: list[dict[str, Any]], string: int, pitch_midi: int, duration: float) -> bool:
     for previous in reversed(notes):
-        if previous.get("string") == string and "pitch_midi" in previous:
+        if previous.get("string") == string and int(previous.get("pitch_midi", -1)) == pitch_midi:
             previous["duration"] = round(float(previous.get("duration", 0)) + duration, 3)
             return True
     return False
@@ -95,7 +111,7 @@ def _extract_track_notes(track, measure_starts: list[float]) -> list[dict[str, A
                     if open_pitch is None:
                         continue
                     pitch_midi = open_pitch + int(note.value) + int(track.offset or 0)
-                    if _is_tied_note(note) and _extend_previous_tied_note(notes, int(note.string), duration):
+                    if _is_tied_note(note) and _extend_previous_tied_note(notes, int(note.string), pitch_midi, duration):
                         continue
                     notes.append(
                         {
@@ -130,6 +146,7 @@ def import_guitar_pro_file(path: Path) -> dict[str, Any]:
                 "name": _track_name(track),
                 "source_track": track.name,
                 "capo_fret": int(track.offset or 0),
+                "tuning_midi": _normalised_track_tuning(track),
                 "strings": [{"number": int(string.number), "value": int(string.value)} for string in track.strings],
                 "statistics": _track_stats(notes),
                 "notes": notes,
@@ -157,7 +174,7 @@ def import_guitar_pro_file(path: Path) -> dict[str, Any]:
             "capo_fret": common_capo,
         },
         "tuning": {
-            "name": "imported",
+            "name": _detect_imported_tuning(tracks),
             "details": None,
         },
         "sources": {

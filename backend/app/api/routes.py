@@ -47,6 +47,7 @@ async def create_transcription(
             "instruments": [i.value for i in request_data.instruments],
             "tuning": request_data.tuning or "auto",
             "constraints": request_data.constraints.to_worker_payload(),
+            "reference_tab": request_data.reference_tab.to_worker_payload() if request_data.reference_tab else None,
         },
     )
 

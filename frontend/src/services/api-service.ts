@@ -9,6 +9,15 @@ export interface TranscriptionRequest {
     triplet_feel?: 'auto' | 'straight' | 'triplet';
     capo_fret?: number;
   };
+  reference_tab?: {
+    ascii_tab: string;
+    tempo_bpm?: number | null;
+    key?: string | null;
+    tuning?: string | null;
+    track_name?: string;
+    columns_per_beat?: number;
+    default_duration_beats?: number;
+  } | null;
 }
 
 export interface JobResponse {

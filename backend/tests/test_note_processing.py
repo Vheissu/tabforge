@@ -57,6 +57,17 @@ class NoteProcessingTests(unittest.TestCase):
         self.assertGreaterEqual(notes[0].duration, 1.0)
         self.assertEqual(notes[0].velocity, 100)
 
+    def test_short_events_are_promoted_to_gp5_safe_sixteenth_notes(self) -> None:
+        from app.services.note_processing import prepare_note_events_for_tab
+
+        events = [
+            {"start_time": 0, "end_time": 0.01, "pitch_midi": 64, "velocity": 90},
+        ]
+
+        notes = prepare_note_events_for_tab(events, "guitar", 120, "standard")
+
+        self.assertEqual(notes[0].duration, 0.25)
+
     def test_triplet_feel_uses_triplet_grid(self) -> None:
         from app.services.note_processing import prepare_note_events_for_tab
 

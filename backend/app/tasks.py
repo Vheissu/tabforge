@@ -59,11 +59,13 @@ def process_transcription(
     instruments: list,
     tuning: str,
     constraints: dict | None = None,
+    reference_tab: dict | None = None,
 ):
     from app.services.audio import analyze_audio, detect_tuning
     from app.services.constraints import normalise_constraints
     from app.services.draft import build_tab_draft
     from app.services.gp import create_guitar_pro_file
+    from app.services.reference_tab import build_reference_tab_draft, has_reference_tab
     from app.services.separation import separate_stems
     from app.services.stems import select_tuning_detection_stem
     from app.services.storage import upload_to_storage
@@ -77,6 +79,63 @@ def process_transcription(
         metadata = extract_audio(youtube_url, TEMP_DIR / job_id)
         audio_path = metadata["audio_path"]
 
+        if has_reference_tab(reference_tab):
+            reference_payload = reference_tab or {}
+            tempo = int(reference_payload.get("tempo_bpm") or tab_constraints["tempo_bpm"] or 120)
+            key = reference_payload.get("key")
+            if not reference_payload.get("tempo_bpm") and not tab_constraints["tempo_bpm"]:
+                _run_async(_update_job(job_id, status="analyzing", progress=35, message="Reading tempo for reference tab"))
+                detected_tempo, detected_key = analyze_audio(audio_path)
+                tempo = detected_tempo
+                key = key or detected_key
+            reference_tuning = reference_tab.get("tuning") if reference_tab else None
+            detected_tuning = reference_tuning or (tuning if tuning and tuning != "auto" else "standard")
+            _run_async(_update_job(job_id, status="generating", progress=75, message="Building GP5 from reference tab"))
+            draft = build_reference_tab_draft(
+                reference_tab or {},
+                metadata=metadata,
+                tempo=tempo,
+                key=key,
+                tuning=detected_tuning,
+                constraints=tab_constraints,
+            )
+            output_path = OUTPUT_DIR / f"{job_id}.gp5"
+            (OUTPUT_DIR / f"{job_id}.draft.json").write_text(
+                json.dumps(draft, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            from app.services.draft import draft_to_transcription
+
+            create_guitar_pro_file(draft_to_transcription(draft), str(output_path))
+
+            try:
+                download_url = upload_to_storage(output_path, f"{job_id}.gp5")
+                completion_message = "Completed from reference tab"
+            except Exception as upload_exc:
+                logger.warning("Storage upload failed for job %s: %s", job_id, upload_exc)
+                download_url = None
+                completion_message = "Completed from reference tab; serving local download"
+
+            _run_async(
+                _update_job(
+                    job_id,
+                    status="completed",
+                    progress=100,
+                    download_url=download_url,
+                    title=metadata["title"],
+                    message=completion_message,
+                )
+            )
+
+            cleanup_temp_files(job_id)
+            return {
+                "status": "completed",
+                "progress": 100,
+                "download_url": download_url,
+                "title": metadata["title"],
+                "source": "reference_tab",
+            }
+
         separation_message = (
             "Separating stems" if settings.separation_enabled else "Skipping separation (fast mode)"
         )
@@ -87,6 +146,7 @@ def process_transcription(
         detected_tempo, key = analyze_audio(audio_path)
         tempo = tab_constraints["tempo_bpm"] or detected_tempo
 
+        detected_tuning = tuning
         transcription: dict = {
             "title": metadata["title"],
             "artist": metadata["artist"],
@@ -100,7 +160,6 @@ def process_transcription(
             "capo_fret": tab_constraints["capo_fret"],
         }
 
-        detected_tuning = tuning
         if not tuning or tuning == "auto":
             _run_async(_update_job(job_id, status="analyzing", progress=37, message="Detecting tuning"))
             tuning_stem, tuning_source = select_tuning_detection_stem(stems, instruments, audio_path)

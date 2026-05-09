@@ -34,6 +34,31 @@ class TranscriptionConstraints(BaseModel):
         }
 
 
+class ReferenceTabRequest(BaseModel):
+    ascii_tab: str = Field(min_length=1, max_length=120_000)
+    title: Optional[str] = Field(default=None, max_length=200)
+    artist: Optional[str] = Field(default=None, max_length=200)
+    tempo_bpm: Optional[int] = Field(default=None, ge=40, le=260)
+    key: Optional[str] = Field(default=None, max_length=16)
+    tuning: Optional[str] = Field(default=None, pattern="^(standard|drop_d|half_step_down|full_step_down|auto)$")
+    track_name: Instrument = Instrument.guitar
+    columns_per_beat: float = Field(default=4.0, ge=1.0, le=16.0)
+    default_duration_beats: float = Field(default=0.25, gt=0, le=4.0)
+
+    def to_worker_payload(self) -> dict:
+        return {
+            "ascii_tab": self.ascii_tab,
+            "title": self.title,
+            "artist": self.artist,
+            "tempo_bpm": self.tempo_bpm,
+            "key": self.key,
+            "tuning": self.tuning,
+            "track_name": self.track_name.value,
+            "columns_per_beat": self.columns_per_beat,
+            "default_duration_beats": self.default_duration_beats,
+        }
+
+
 class TrackCorrection(BaseModel):
     enabled: bool = True
     min_velocity: Optional[int] = Field(default=None, ge=1, le=127)
@@ -58,6 +83,7 @@ class TranscriptionRequest(BaseModel):
     )
     tuning: Optional[str] = "auto"
     constraints: TranscriptionConstraints = Field(default_factory=TranscriptionConstraints)
+    reference_tab: Optional[ReferenceTabRequest] = None
 
 
 class JobStatus(str, Enum):

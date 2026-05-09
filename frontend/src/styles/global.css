@@ -52,7 +52,8 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -281,24 +282,58 @@ select {
   padding-left: 14px;
 }
 
+.reference-bar {
+  border-top-style: dashed;
+}
+
+.reference-tab-box {
+  display: grid;
+  gap: 14px;
+  border-left: 3px solid var(--green);
+  padding-left: 14px;
+}
+
+.reference-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.4fr);
+  gap: 14px;
+}
+
 .field {
   display: grid;
   gap: 8px;
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
-  min-height: 46px;
   border: 1px solid var(--rule);
   border-radius: var(--radius-control);
   background: #fffaf0;
   color: var(--ink);
+}
+
+input,
+select {
+  min-height: 46px;
   padding: 0 12px;
+}
+
+textarea {
+  min-height: 190px;
+  resize: vertical;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre;
+  overflow: auto;
 }
 
 input:focus,
 select:focus,
+textarea:focus,
 .chip:focus-visible,
 .cta:focus-visible,
 .ghost:focus-visible,
@@ -662,6 +697,7 @@ select:focus,
   .job-meta,
   .draft-facts,
   .correction-grid,
+  .reference-grid,
   .constraint-grid {
     grid-template-columns: 1fr;
   }

@@ -41,12 +41,27 @@ class GuitarProImportTests(unittest.TestCase):
         self.assertEqual(draft["metadata"]["title"], "Reference Tab")
         self.assertEqual(draft["constraints"]["time_signature"], "3/4")
         self.assertEqual(draft["constraints"]["capo_fret"], 2)
+        self.assertEqual(draft["tuning"]["name"], "standard")
         self.assertEqual(draft["tracks"][0]["capo_fret"], 2)
+        self.assertEqual(draft["tracks"][0]["tuning_midi"], [40, 45, 50, 55, 59, 64])
         self.assertEqual(draft["tracks"][0]["notes"][0]["pitch"], "F#4")
         self.assertEqual(draft["tracks"][0]["notes"][0]["pitch_midi"], 66)
         self.assertEqual(draft["tracks"][0]["strings"][0]["value"], 64)
         self.assertEqual(draft["tracks"][0]["statistics"]["note_count"], 2)
         self.assertEqual(draft["tracks"][1]["name"], "drums")
+
+    def test_tie_import_only_extends_matching_pitch_on_same_string(self) -> None:
+        from app.services.gp_import import _extend_previous_tied_note
+
+        notes = [
+            {"pitch_midi": 40, "string": 6, "duration": 1},
+            {"pitch_midi": 41, "string": 6, "duration": 1},
+        ]
+
+        self.assertTrue(_extend_previous_tied_note(notes, 6, 40, 0.5))
+        self.assertFalse(_extend_previous_tied_note(notes, 6, 42, 0.5))
+        self.assertEqual(notes[0]["duration"], 1.5)
+        self.assertEqual(notes[1]["duration"], 1)
 
 
 if __name__ == "__main__":

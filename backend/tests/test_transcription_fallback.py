@@ -172,6 +172,23 @@ class GeminiRefinementTests(unittest.TestCase):
         self.assertEqual(result["notes"][0]["pitch"], "E4")
         self.assertEqual(result["notes"][0]["pitch_midi"], 64)
 
+    def test_transcription_clips_same_string_sustain_before_next_attack(self) -> None:
+        from app.services.transcription import _clip_same_string_overlaps
+        from app.services.fretboard import FretPosition, Note
+
+        notes = [
+            Note("E2", start_beat=0, duration=2, position=FretPosition(string=6, fret=0), velocity=90),
+            Note("F2", start_beat=1, duration=1, position=FretPosition(string=6, fret=1), velocity=90),
+            Note("B3", start_beat=0.5, duration=2, position=FretPosition(string=2, fret=0), velocity=90),
+        ]
+
+        clipped = _clip_same_string_overlaps(notes)
+        e2 = next(note for note in clipped if note.pitch == "E2")
+        b3 = next(note for note in clipped if note.pitch == "B3")
+
+        self.assertEqual(e2.duration, 1)
+        self.assertEqual(b3.duration, 2)
+
 
 @unittest.skipUnless(importlib.util.find_spec("pydantic_settings"), "API dependencies are not installed")
 class BasicPitchNormalizationTests(unittest.TestCase):

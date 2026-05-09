@@ -27,14 +27,14 @@ class ProcessingProfile:
 PROFILES = {
     "guitar": ProcessingProfile(
         min_velocity=24,
-        min_duration_beats=0.125,
+        min_duration_beats=0.25,
         merge_gap_beats=0.125,
         grid_beats=0.25,
         max_notes_per_slot=6,
     ),
     "bass": ProcessingProfile(
         min_velocity=28,
-        min_duration_beats=0.125,
+        min_duration_beats=0.25,
         merge_gap_beats=0.125,
         grid_beats=0.25,
         max_notes_per_slot=1,

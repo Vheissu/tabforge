@@ -113,6 +113,72 @@ class BenchmarkAccuracyTests(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertEqual(result["cases"][0]["name"], "case-1")
 
+    def test_manifest_runner_can_scan_shifted_reference_windows(self) -> None:
+        from app.tools.benchmark_accuracy import main
+
+        reference = {
+            "tracks": [
+                {
+                    "name": "guitar",
+                    "notes": [{"pitch_midi": 40, "start_beat": 0, "duration": 0.25, "string": 6, "fret": 0}],
+                }
+            ]
+        }
+        candidate = {
+            "tracks": [
+                {
+                    "name": "guitar",
+                    "notes": [{"pitch_midi": 40, "start_beat": 8, "duration": 0.25, "string": 6, "fret": 0}],
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            reference_path = root / "reference.draft.json"
+            candidate_path = root / "candidate.draft.json"
+            manifest_path = root / "manifest.json"
+            reference_path.write_text(json.dumps(reference), encoding="utf-8")
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "cases": [
+                            {
+                                "name": "shifted-riff",
+                                "reference": reference_path.name,
+                                "candidate": candidate_path.name,
+                                "scan_window": True,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output = io.StringIO()
+            with patch(
+                "sys.argv",
+                [
+                    "benchmark_accuracy",
+                    "--manifest",
+                    str(manifest_path),
+                    "--min-f1",
+                    "1",
+                    "--min-strict-accuracy",
+                    "1",
+                ],
+            ):
+                with contextlib.redirect_stdout(output):
+                    exit_code = main()
+
+            result = json.loads(output.getvalue())
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["cases"][0]["scan_window"])
+        self.assertEqual(result["cases"][0]["alignment"]["alignment_offset_beats"], 8)
+
 
 if __name__ == "__main__":
     unittest.main()

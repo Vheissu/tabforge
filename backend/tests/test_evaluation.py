@@ -184,6 +184,41 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(result["diagnostics"]["missed_reference"]["guitar"][0]["pitch_midi"], 67)
         self.assertEqual(result["diagnostics"]["extra_candidate"]["guitar"][0]["pitch_midi"], 69)
 
+    def test_scans_candidate_for_shifted_reference_window(self) -> None:
+        from app.services.evaluation import compare_drafts, scan_reference_window
+
+        reference = {
+            "tracks": [
+                {
+                    "name": "guitar",
+                    "notes": [
+                        {"pitch_midi": 40, "start_beat": 0, "duration": 0.25, "string": 6, "fret": 0},
+                        {"pitch_midi": 57, "start_beat": 0.5, "duration": 0.25, "string": 3, "fret": 2},
+                    ],
+                }
+            ]
+        }
+        candidate = {
+            "tracks": [
+                {
+                    "name": "guitar",
+                    "notes": [
+                        {"pitch_midi": 64, "start_beat": 1, "duration": 0.25, "string": 1, "fret": 0},
+                        {"pitch_midi": 40, "start_beat": 8, "duration": 0.25, "string": 6, "fret": 0},
+                        {"pitch_midi": 57, "start_beat": 8.5, "duration": 0.25, "string": 3, "fret": 2},
+                    ],
+                }
+            ]
+        }
+
+        unaligned = compare_drafts(reference, candidate, strict=True)
+        aligned = scan_reference_window(reference, candidate, strict=True)
+
+        self.assertEqual(unaligned["overall"]["f1"], 0)
+        self.assertEqual(aligned["best"]["alignment_offset_beats"], 8)
+        self.assertEqual(aligned["best"]["result"]["overall"]["f1"], 1)
+        self.assertEqual(aligned["best"]["candidate_window_notes"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

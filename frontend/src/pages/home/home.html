@@ -116,6 +116,44 @@
         </label>
       </div>
 
+      <div class="settings-bar reference-bar">
+        <div>
+          <span class="meta-label">Reference tab</span>
+          <p>Paste a trusted six-line ASCII tab when you want the GP5 built from known fingerings.</p>
+        </div>
+        <button type="button" class="ghost" click.trigger="toggleReferenceTab()">
+          ${showReferenceTab ? 'Hide reference' : 'Add reference'}
+        </button>
+      </div>
+
+      <div if.bind="showReferenceTab" class="reference-tab-box">
+        <label class="field">
+          <span>ASCII guitar tab</span>
+          <textarea
+            value.bind="referenceTabText"
+            rows="9"
+            spellcheck="false"
+            placeholder="e|----------------|&#10;B|----------------|&#10;G|-2-2-2-----0h2-|&#10;D|---------3------|&#10;A|----------------|&#10;E|-0---1---0---1--|"
+          ></textarea>
+        </label>
+
+        <div class="reference-grid">
+          <label class="field">
+            <span>Key</span>
+            <input type="text" maxlength="16" value.bind="referenceTabKey" placeholder="Optional" />
+          </label>
+
+          <label class="field">
+            <span>Columns per beat</span>
+            <select value.bind="referenceColumnsPerBeat">
+              <option value="2">2</option>
+              <option value="4">4</option>
+              <option value="8">8</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
       <div if.bind="error" class="alert">
         ${error}
       </div>

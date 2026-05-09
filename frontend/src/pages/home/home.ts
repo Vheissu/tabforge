@@ -14,6 +14,10 @@ export class Home {
   firstBarTempoBpm = '';
   tripletFeel = 'auto';
   capoFret = 0;
+  showReferenceTab = false;
+  referenceTabText = '';
+  referenceTabKey = '';
+  referenceColumnsPerBeat = '4';
   isLoading = false;
   error = '';
 
@@ -40,6 +44,18 @@ export class Home {
           capo_fret: Number(this.capoFret) || 0,
         },
       };
+      const referenceTab = this.referenceTabText.trim();
+      if (referenceTab) {
+        request.reference_tab = {
+          ascii_tab: referenceTab,
+          tempo_bpm: this.firstBarTempoBpm === '' ? null : Number(this.firstBarTempoBpm),
+          key: this.referenceTabKey.trim() || null,
+          tuning: this.tuning,
+          track_name: 'guitar',
+          columns_per_beat: Number(this.referenceColumnsPerBeat) || 4,
+          default_duration_beats: 0.25,
+        };
+      }
 
       const response = await this.api.createTranscription(request);
       await this.router.load(`/job/${response.job_id}`);
@@ -56,5 +72,9 @@ export class Home {
 
   toggleSettings(): void {
     this.showSettings = !this.showSettings;
+  }
+
+  toggleReferenceTab(): void {
+    this.showReferenceTab = !this.showReferenceTab;
   }
 }

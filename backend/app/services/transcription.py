@@ -314,6 +314,28 @@ def _apply_refinement_notes(
     return positioned, "applied"
 
 
+def _clip_same_string_overlaps(notes: list[Note], min_duration_beats: float = 0.25) -> list[Note]:
+    by_string: dict[int, list[Note]] = {}
+    for note in notes:
+        if note.position is None:
+            continue
+        by_string.setdefault(note.position.string, []).append(note)
+
+    clipped: list[Note] = []
+    for string_notes in by_string.values():
+        ordered = sorted(string_notes, key=lambda note: (note.start_beat, -note.velocity))
+        for index, note in enumerate(ordered):
+            duration = note.duration
+            if index + 1 < len(ordered):
+                next_start = ordered[index + 1].start_beat
+                if note.start_beat < next_start < note.start_beat + duration:
+                    duration = max(min_duration_beats, next_start - note.start_beat)
+            note.duration = round(duration, 6)
+            clipped.append(note)
+
+    return sorted(clipped, key=lambda note: (note.start_beat, note.pitch))
+
+
 def _serialise_notes(notes: list[Note]) -> list[dict]:
     return [
         {
@@ -481,6 +503,7 @@ def transcribe_pitched_instrument(
         len(positioned_notes),
     )
     final_notes = refinement_notes if refinement_status == "applied" else positioned_notes
+    final_notes = _clip_same_string_overlaps(final_notes)
 
     return {
         "notes": _serialise_notes(final_notes),

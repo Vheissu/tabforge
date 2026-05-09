@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.services.evaluation import compare_drafts
+from app.services.evaluation import compare_drafts, scan_reference_window
 
 
 def _load_json(path: Path) -> Any:
@@ -27,7 +27,7 @@ def _case_passed(result: dict[str, Any], min_f1: float, min_strict_accuracy: flo
     return True
 
 
-def _load_manifest(path: Path) -> list[tuple[str, Path, Path]]:
+def _load_manifest(path: Path) -> list[dict[str, Any]]:
     manifest = _load_json(path)
     if isinstance(manifest, dict):
         manifest_cases = manifest.get("cases", [])
@@ -44,7 +44,14 @@ def _load_manifest(path: Path) -> list[tuple[str, Path, Path]]:
             reference = path.parent / reference
         if not candidate.is_absolute():
             candidate = path.parent / candidate
-        cases.append((str(item.get("name") or f"case-{index}"), reference, candidate))
+        cases.append(
+            {
+                "name": str(item.get("name") or f"case-{index}"),
+                "reference": reference,
+                "candidate": candidate,
+                "scan_window": item.get("scan_window"),
+            }
+        )
     return cases
 
 
@@ -95,25 +102,70 @@ def main() -> int:
     parser.add_argument("--duration-tolerance-beats", type=float, default=0.25)
     parser.add_argument("--min-f1", type=float, default=0.90)
     parser.add_argument("--min-strict-accuracy", type=float, default=0.90)
+    parser.add_argument("--scan-window", action="store_true", help="Score the best aligned reference window instead of absolute starts.")
+    parser.add_argument("--alignment-grid-beats", type=float, default=0.25)
+    parser.add_argument("--max-offset-beats", type=float)
     args = parser.parse_args()
 
-    benchmark_cases: list[tuple[str, Path, Path]] = []
+    benchmark_cases: list[dict[str, Any]] = []
     if args.manifest:
         benchmark_cases.extend(_load_manifest(args.manifest))
-    benchmark_cases.extend((f"pair-{index}", reference, candidate) for index, (reference, candidate) in enumerate(args.pairs, start=1))
+    benchmark_cases.extend(
+        {
+            "name": f"pair-{index}",
+            "reference": reference,
+            "candidate": candidate,
+            "scan_window": args.scan_window,
+        }
+        for index, (reference, candidate) in enumerate(args.pairs, start=1)
+    )
     if not benchmark_cases:
         parser.error("provide at least one pair or --manifest")
 
     cases = []
     failed = False
-    for name, reference_path, candidate_path in benchmark_cases:
-        result = compare_drafts(
-            _load_json(reference_path),
-            _load_json(candidate_path),
-            tolerance_beats=args.tolerance_beats,
-            duration_tolerance_beats=args.duration_tolerance_beats,
-            strict=True,
-        )
+    for benchmark_case in benchmark_cases:
+        name = str(benchmark_case["name"])
+        reference_path = Path(benchmark_case["reference"])
+        candidate_path = Path(benchmark_case["candidate"])
+        scan_window = bool(args.scan_window if benchmark_case.get("scan_window") is None else benchmark_case.get("scan_window"))
+        reference = _load_json(reference_path)
+        candidate = _load_json(candidate_path)
+        alignment: dict[str, Any] | None = None
+        if scan_window:
+            scan = scan_reference_window(
+                reference,
+                candidate,
+                tolerance_beats=args.tolerance_beats,
+                duration_tolerance_beats=args.duration_tolerance_beats,
+                strict=True,
+                grid_beats=args.alignment_grid_beats,
+                max_offset_beats=args.max_offset_beats,
+            )
+            best = scan.get("best")
+            if not best:
+                result = compare_drafts(
+                    reference,
+                    candidate,
+                    tolerance_beats=args.tolerance_beats,
+                    duration_tolerance_beats=args.duration_tolerance_beats,
+                    strict=True,
+                )
+            else:
+                result = best["result"]
+                alignment = {
+                    "offsets_tested": scan["offsets_tested"],
+                    "alignment_offset_beats": best["alignment_offset_beats"],
+                    "candidate_window_notes": best["candidate_window_notes"],
+                }
+        else:
+            result = compare_drafts(
+                reference,
+                candidate,
+                tolerance_beats=args.tolerance_beats,
+                duration_tolerance_beats=args.duration_tolerance_beats,
+                strict=True,
+            )
         passed = _case_passed(result, args.min_f1, args.min_strict_accuracy)
         failed = failed or not passed
         cases.append(
@@ -121,6 +173,8 @@ def main() -> int:
                 "name": name,
                 "reference": str(reference_path),
                 "candidate": str(candidate_path),
+                "scan_window": scan_window,
+                "alignment": alignment,
                 "passed": passed,
                 "overall_f1": result["overall"]["f1"],
                 "strict_accuracy": result["strict_accuracy"],
